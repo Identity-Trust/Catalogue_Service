@@ -1,0 +1,762 @@
+import { useMemo, useState, useEffect } from 'react'
+import './App.css'
+
+const initialPendingOrganizations = [
+  {
+    id: 'org_fs8b2c4e',
+    name: 'Apex Digital',
+    type: 'Company',
+    country: 'India',
+    email: 'admin@apexdigital.io',
+    status: 'pending',
+    registrationDetails: { registrationNumber: 'CIN123456', gst: '07ABCDE1234F1Z5' },
+    representative: { name: 'Priya Shah', email: 'priya@apexdigital.io', mobile: '+91-9876543210', designation: 'Head Legal' },
+    documents: [ { name: 'Certificate of Incorporation.pdf' }, { name: 'PAN.pdf' } ],
+    submittedAt: '05 Aug 2026, 03:53 pm'
+  },
+  {
+    id: 'org_gv9d3a7f',
+    name: 'Verity Health',
+    type: 'Government',
+    country: 'United States',
+    email: 'admin@verityhealth.org',
+    status: 'pending',
+    registrationDetails: { registrationNumber: 'GH-998877', gst: '' },
+    representative: { name: 'Mark Lewis', email: 'mark@verityhealth.org', mobile: '+1-555-234-5678', designation: 'Director' },
+    documents: [ { name: 'Registration.pdf' } ],
+    submittedAt: '06 Aug 2026, 02:15 pm'
+  },
+]
+
+const initialApplications = [
+  { id: 'app-101', orgId: 'org_7k3m9p2x', orgName: 'TechNova Solutions', name: 'Identity Suite', type: 'web', status: 'pending' },
+  { id: 'app-102', orgId: 'org_fs8b2c4e', orgName: 'Apex Digital', name: 'Apex Access Portal', type: 'mobile', status: 'pending' },
+]
+
+const initialSchemas = [
+  { id: 'schema_001', name: 'Employee Schema', orgId: 'org_7k3m9p2x', orgName: 'TechNova Solutions', fields: ['firstName','lastName','email','employeeId'], status: 'pending', createdAt: '2026-07-20, 10:32 am' },
+  { id: 'schema_002', name: 'Customer Profile', orgId: 'org_fs8b2c4e', orgName: 'Apex Digital', fields: ['name','email','phone','address'], status: 'pending', createdAt: '2026-08-05, 03:40 pm' },
+]
+
+const approvedOrgIds = ['org_7k3m9p2x', 'org_b8c5d1k9', 'org_f9e2h4q7']
+const orgAdminMenu = ['Dashboard', 'Organization Profile', 'Applications', 'Registration Builder', 'Login Configuration', 'Auth Policies', 'Users', 'Identity Management', 'API Credentials', 'Webhooks', 'Audit Logs', 'Settings']
+
+function App() {
+  const [view, setView] = useState('home')
+  const [step, setStep] = useState(0)
+  const [registrationForm, setRegistrationForm] = useState({
+    name: '', type: '', country: '', email: '', phone: '', gst: '', repName: '', repEmail: '', repMobile: '', designation: '', address: '', website: '', domain: '', logo: '',
+  })
+  const [platformLogin, setPlatformLogin] = useState({ username: '', password: '' })
+  const [platformLoginError, setPlatformLoginError] = useState('')
+  const [pendingOrganizations, setPendingOrganizations] = useState(initialPendingOrganizations)
+  const [approvedOrganizations, setApprovedOrganizations] = useState([{ id: 'org_7k3m9p2x', name: 'TechNova Solutions', status: 'approved', email: 'admin@technova.io', country: 'India' }])
+  const [applications, setApplications] = useState(initialApplications)
+  const [schemas, setSchemas] = useState(initialSchemas)
+  const [auditLogs, setAuditLogs] = useState(() => {
+    try { const raw = localStorage.getItem('catalogue_audit_v1'); return raw ? JSON.parse(raw) : [] } catch(e) { return [] }
+  })
+
+  const addAudit = (action, details) => {
+    const entry = { id: `audit_${Date.now()}`, action, details, timestamp: new Date().toLocaleString() }
+    setAuditLogs(prev => [entry, ...prev])
+  }
+
+  // local persistence: try to load saved state from localStorage
+  const loadSaved = () => {
+    try {
+      const raw = localStorage.getItem('catalogue_state_v1')
+      if (!raw) return null
+      return JSON.parse(raw)
+    } catch (e) {
+      return null
+    }
+  }
+  const saved = loadSaved()
+  // organizations: unified list used by the Platform Organizations view. Keep in sync with pending/approved lists where needed.
+  const [organizations, setOrganizations] = useState(() => {
+    if (saved && saved.organizations) return saved.organizations
+    // start with approved then pending
+    const seed = [
+      { id: 'org_7k3m9p2x', name: 'TechNova Solutions', type: 'Company', country: 'India', email: 'admin@technova.io', status: 'approved' },
+      ...initialPendingOrganizations.map(o => ({ ...o })),
+    ]
+    return seed
+  })
+  const [orgsFilter, setOrgsFilter] = useState('All')
+  const [orgApprovalModal, setOrgApprovalModal] = useState(null)
+  const [orgLoginStage, setOrgLoginStage] = useState(1)
+  const [orgLoginId, setOrgLoginId] = useState('')
+  const [orgLoginChannel, setOrgLoginChannel] = useState('email')
+  const [orgOtp, setOrgOtp] = useState('')
+  const [orgLoginError, setOrgLoginError] = useState('')
+  const [successData, setSuccessData] = useState(null)
+
+  const currentOrg = useMemo(() => approvedOrganizations.find((org) => org.id === orgLoginId) || null, [approvedOrganizations, orgLoginId])
+  const registrationSteps = ['Basic Info', 'Registration Details', 'Representative Details', 'Address', 'Digital Presence']
+
+  const updateField = (field, value) => setRegistrationForm((prev) => ({ ...prev, [field]: value }))
+  const nextStep = () => setStep((prev) => Math.min(prev + 1, registrationSteps.length - 1))
+  const previousStep = () => setStep((prev) => Math.max(prev - 1, 0))
+  const generateOrgId = () => `org_${Math.random().toString(36).slice(2, 10)}`
+
+  const submitRegistration = () => {
+    const generatedId = generateOrgId()
+    const newOrg = {
+      id: generatedId,
+      name: registrationForm.name || 'New Org',
+      type: registrationForm.type || 'Company',
+      country: registrationForm.country || 'India',
+      email: registrationForm.email || 'admin@yourorg.com',
+      status: 'pending',
+      registrationDetails: {
+        registrationNumber: registrationForm.gst || '',
+      },
+      representative: {
+        name: registrationForm.repName || '',
+        email: registrationForm.repEmail || '',
+        mobile: registrationForm.repMobile || '',
+        designation: registrationForm.designation || ''
+      },
+      documents: [],
+      submittedAt: new Date().toLocaleString(),
+    }
+
+    // add to unified organizations list and pending list
+    setOrganizations((prev) => [newOrg, ...prev])
+    setPendingOrganizations((prev) => [newOrg, ...prev])
+    setApplications((prev) => [{ id: `app-${Date.now()}`, orgId: generatedId, orgName: newOrg.name, name: `${newOrg.name} IAM Portal`, type: 'web', status: 'pending' }, ...prev])
+    setSuccessData({ orgId: generatedId, createdAt: new Date().toLocaleString(), status: 'Awaiting admin approval' })
+    setView('success')
+    setStep(0)
+  }
+
+  const handlePlatformLogin = () => {
+    if (platformLogin.username === 'admin' && platformLogin.password === 'admin') {
+      setPlatformLoginError('')
+      setView('platform-dashboard')
+      return
+    }
+    setPlatformLoginError('Invalid username or password. Please use admin / admin.')
+  }
+
+  const approveOrganization = (org) => {
+    // remove from pending
+    setPendingOrganizations((prev) => prev.filter((item) => item.id !== org.id))
+    // add to approved list with metadata
+    setApprovedOrganizations((prev) => [{ ...org, status: 'approved', approvedAt: new Date().toLocaleString(), orgAdminActivated: true }, ...prev])
+    // update unified organizations list
+    setOrganizations((prev) => {
+      const exists = prev.some((i) => i.id === org.id)
+      if (exists) return prev.map((i) => (i.id === org.id ? { ...i, status: 'approved', approvedAt: new Date().toLocaleString(), orgAdminActivated: true } : i))
+      return [{ ...org, status: 'approved', approvedAt: new Date().toLocaleString(), orgAdminActivated: true }, ...prev]
+    })
+
+    // create org admin account mock (for demo) and show credentials modal
+    const username = `${org.name.replace(/[^a-zA-Z0-9]/g,'').toLowerCase().slice(0,8)}_admin`
+    const password = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(-2)
+    setOrgCredentialModal({ org, username, password })
+
+    // close review modal
+    setOrgApprovalModal(null)
+  }
+
+  const rejectOrganization = (org) => {
+    setPendingOrganizations((prev) => prev.filter((item) => item.id !== org.id))
+    setOrganizations((prev) => prev.map((i) => (i.id === org.id ? { ...i, status: 'rejected', rejectedAt: new Date().toLocaleString() } : i)))
+    setOrgApprovalModal(null)
+  }
+
+  const requestMoreInfo = (org, message = 'Please provide additional documentation') => {
+    setOrganizations((prev) => prev.map((i) => (i.id === org.id ? { ...i, status: 'requires_more_info', infoRequest: { message, requestedAt: new Date().toLocaleString() } } : i)))
+    // keep it in pending list but mark as needs info
+    setPendingOrganizations((prev) => prev.map((i) => (i.id === org.id ? { ...i, status: 'requires_more_info' } : i)))
+    setOrgApprovalModal(null)
+  }
+
+  const approveApplication = (app) => {
+    setApplications((prev) => prev.map((item) => (item.id === app.id ? { ...item, status: 'approved' } : item)))
+    setOrgApprovalModal(null)
+  }
+
+  const approveSchema = (schema) => {
+    setSchemas((prev) => prev.map((s) => (s.id === schema.id ? { ...s, status: 'approved', approvedAt: new Date().toLocaleString() } : s)))
+    setOrgApprovalModal(null)
+  }
+
+  const rejectSchema = (schema) => {
+    setSchemas((prev) => prev.map((s) => (s.id === schema.id ? { ...s, status: 'rejected', rejectedAt: new Date().toLocaleString() } : s)))
+    setOrgApprovalModal(null)
+  }
+
+  // Request more info modal state
+  const [requestModal, setRequestModal] = useState(null)
+  // Org credential modal shown after approval (mocked credentials)
+  const [orgCredentialModal, setOrgCredentialModal] = useState(null)
+  // publish modal for registration builder
+  const [publishModal, setPublishModal] = useState(null)
+
+  useEffect(() => {
+    // save key parts of app state to localStorage on change
+    try {
+      const toSave = { organizations, pendingOrganizations, approvedOrganizations, applications, schemas }
+      localStorage.setItem('catalogue_state_v1', JSON.stringify(toSave))
+      localStorage.setItem('catalogue_audit_v1', JSON.stringify(auditLogs))
+    } catch (e) {
+      // ignore
+    }
+  }, [organizations, pendingOrganizations, approvedOrganizations, applications, schemas, auditLogs])
+
+  const suspendOrganization = (org) => {
+    setOrganizations((prev) => prev.map((i) => (i.id === org.id ? { ...i, status: 'suspended', suspendedAt: new Date().toLocaleString() } : i)))
+    // reflect in approvedOrganizations if present
+    setApprovedOrganizations((prev) => prev.map((i) => (i.id === org.id ? { ...i, status: 'suspended', suspendedAt: new Date().toLocaleString() } : i)))
+  }
+
+  const unsuspendOrganization = (org) => {
+    setOrganizations((prev) => prev.map((i) => (i.id === org.id ? { ...i, status: 'approved', resumedAt: new Date().toLocaleString() } : i)))
+    setApprovedOrganizations((prev) => prev.map((i) => (i.id === org.id ? { ...i, status: 'approved', resumedAt: new Date().toLocaleString() } : i)))
+  }
+
+  const handleOrgLoginSubmit = () => {
+    if (orgLoginStage === 1) {
+      const exists = approvedOrgIds.includes(orgLoginId) || approvedOrganizations.some((org) => org.id === orgLoginId)
+      if (!exists) {
+        setOrgLoginError('Organization ID not found or not yet approved.')
+        return
+      }
+      setOrgLoginError('')
+      setOrgLoginStage(2)
+      return
+    }
+
+    if (orgLoginStage === 2) {
+      setOrgLoginStage(3)
+      setOrgLoginError('')
+      return
+    }
+
+    if (orgOtp === '000000') {
+      setOrgLoginError('Invalid OTP. Please enter a valid 6-digit code.')
+      return
+    }
+
+    setOrgLoginError('')
+    setView('organization-dashboard')
+  }
+
+  const renderHome = () => (
+    <div className="home-screen">
+      <div className="home-topbar">
+        <div className="brand-badge">Identity OS</div>
+        <div className="status-pill">All Systems Operational</div>
+      </div>
+
+      <section className="hero-block">
+        <div className="hero-copy">
+          <div className="brand-label">Identity OS</div>
+          <h1>Secure organization onboarding, identity management, and authentication at enterprise scale.</h1>
+          <p>Register a new organization, sign in as a platform administrator, or continue as an organization admin to manage identity operations.</p>
+        </div>
+
+        <div className="role-stack">
+          <button type="button" className="role-card primary" onClick={() => setView('registration')}>
+            <span className="role-card-title">Register Organization</span>
+            <span className="role-card-subtitle">Onboard your organization to Identity OS</span>
+            <span className="role-card-action">Start Registration</span>
+          </button>
+          <button type="button" className="role-card" onClick={() => setView('platform')}>
+            <span className="role-card-title">Platform Admin</span>
+            <span className="role-card-subtitle">Review organizations, apps &amp; schemas</span>
+            <span className="role-card-action">Admin Login</span>
+          </button>
+          <button type="button" className="role-card" onClick={() => setView('organization')}>
+            <span className="role-card-title">Organization Admin</span>
+            <span className="role-card-subtitle">Manage identity configuration</span>
+            <span className="role-card-action">Org Admin Login</span>
+          </button>
+        </div>
+      </section>
+
+      <section className="stats-grid">
+        <div className="stat-box"><strong>1,200+</strong><span>Organizations Onboarded</span></div>
+        <div className="stat-box"><strong>48M+</strong><span>Identities Managed</span></div>
+        <div className="stat-box"><strong>99.99%</strong><span>Uptime SLA</span></div>
+      </section>
+    </div>
+  )
+
+  const renderHeader = (title) => (
+    <div className="page-header">
+      <button type="button" className="back-button" onClick={() => setView('home')}>Back</button>
+      <span className="back-divider">|</span>
+      <span className="page-title">{title}</span>
+    </div>
+  )
+
+  const renderPlatformSidebar = () => {
+    const navSections = [
+      {
+        title: null,
+        items: [
+          { label: 'Dashboard', key: 'platform-dashboard' },
+        ]
+      },
+      {
+        title: 'Management',
+        items: [
+          { label: 'Organizations', key: 'platform-organizations', badge: pendingOrganizations.length },
+          { label: 'Applications', key: 'platform-apps' },
+          { label: 'Schema Approvals', key: 'platform-schema' },
+        ]
+      },
+      {
+        title: 'Security',
+        items: [
+          { label: 'Identity Management', key: 'platform-identity-mgmt' },
+          { label: 'Auth Monitoring', key: 'platform-auth-monitor' },
+          { label: 'Audit Logs', key: 'platform-audit' },
+          { label: 'Security Monitoring', key: 'platform-security-monitor' },
+        ]
+      },
+      {
+        title: 'Platform',
+        items: [
+          { label: 'API Management', key: 'platform-api' },
+          { label: 'Trust Management', key: 'platform-trust' },
+          { label: 'Reports', key: 'platform-reports' },
+          { label: 'Notifications', key: 'platform-notifications' },
+          { label: 'Settings', key: 'platform-settings' },
+        ]
+      }
+    ]
+
+    return (
+      <aside className="side-nav">
+        <div className="brand-block">Identity OS<br/><small style={{opacity:0.7}}>Platform Admin</small></div>
+        {navSections.map((section, si) => (
+          <div key={si} className="nav-section">
+            {section.title && <div className="nav-section-title">{section.title}</div>}
+            <ul>
+              {section.items.map((it) => (
+                <li key={it.key} onClick={() => setView(it.key)} className={view === it.key ? 'active' : ''}>
+                  <span>{it.label}</span>{it.badge ? <span className="nav-badge">{it.badge}</span> : null}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </aside>
+    )
+  }
+
+  const renderRegistrationStep = () => {
+    if (step === 0) {
+      return (
+        <>
+          <div className="step-row"><label>ORGANIZATION NAME*<input value={registrationForm.name} onChange={(e) => updateField('name', e.target.value)} placeholder="Legal entity name" /></label></div>
+          <div className="step-row"><label>ORGANIZATION TYPE*<select value={registrationForm.type} onChange={(e) => updateField('type', e.target.value)}><option value="">Select Organization Type</option><option value="Bank">Bank</option><option value="Company">Company</option><option value="Government">Government</option><option value="NGO">NGO</option><option value="Startup">Startup</option><option value="Other">Other</option></select></label></div>
+          <div className="step-row"><label>COUNTRY*<select value={registrationForm.country} onChange={(e) => updateField('country', e.target.value)}><option value="">Select Country</option><option value="India">India</option><option value="United States">United States</option><option value="United Kingdom">United Kingdom</option><option value="Singapore">Singapore</option><option value="UAE">UAE</option><option value="Australia">Australia</option></select></label></div>
+          <div className="split-row"><label>OFFICIAL EMAIL*<input value={registrationForm.email} onChange={(e) => updateField('email', e.target.value)} placeholder="admin@yourorg.com" /></label><button type="button" className="ghost-button">Send OTP to verify →</button></div>
+          <div className="split-row"><label>OFFICIAL PHONE NUMBER*<input value={registrationForm.phone} onChange={(e) => updateField('phone', e.target.value)} placeholder="+91-XXXXXXXXXX" /></label><button type="button" className="ghost-button">Send OTP to verify →</button></div>
+        </>
+      )
+    }
+
+    if (step === 1) {
+      return (
+        <>
+          <div className="step-row"><label>REGISTRATION NUMBER*<input value={registrationForm.gst} onChange={(e) => updateField('gst', e.target.value)} placeholder="GST / CIN / NGO registration number" /></label></div>
+          <button type="button" className="ghost-button align-start">Verify</button>
+        </>
+      )
+    }
+
+    if (step === 2) {
+      return (
+        <>
+          <div className="step-row"><label>REPRESENTATIVE NAME*<input value={registrationForm.repName} onChange={(e) => updateField('repName', e.target.value)} placeholder="Enter representative name" /></label></div>
+          <div className="split-row"><label>REPRESENTATIVE EMAIL*<input value={registrationForm.repEmail} onChange={(e) => updateField('repEmail', e.target.value)} placeholder="rep@yourorg.com" /></label><button type="button" className="ghost-button">Send OTP to verify →</button></div>
+          <div className="step-row"><label>MOBILE NUMBER*<input value={registrationForm.repMobile} onChange={(e) => updateField('repMobile', e.target.value)} placeholder="+91-XXXXXXXXXX" /></label></div>
+          <div className="step-row"><label>DESIGNATION*<input value={registrationForm.designation} onChange={(e) => updateField('designation', e.target.value)} placeholder="Designation" /></label></div>
+        </>
+      )
+    }
+
+    if (step === 3) {
+      return <div className="step-row"><label>ADDRESS*<textarea value={registrationForm.address} onChange={(e) => updateField('address', e.target.value)} placeholder="Street, city, state, postal code, country" rows="5" /></label></div>
+    }
+
+    return (
+      <>
+        <div className="step-row"><label>WEBSITE<input value={registrationForm.website} onChange={(e) => updateField('website', e.target.value)} placeholder="https://www.yourorg.com" /></label></div>
+        <div className="step-row"><label>DOMAIN<input value={registrationForm.domain} onChange={(e) => updateField('domain', e.target.value)} placeholder="yourorg.com" /></label></div>
+        <div className="step-row"><label>LOGO UPLOAD<input value={registrationForm.logo} onChange={(e) => updateField('logo', e.target.value)} placeholder="Upload logo" /></label></div>
+      </>
+    )
+  }
+
+  const renderRegistration = () => (
+    <section className="panel-page">
+      {renderHeader('Identity OS — Organization Registration')}
+      <div className="progress-indicator">{registrationSteps.map((item, index) => <span key={item} className={`progress-dot ${index === step ? 'active' : ''}`}>{index + 1}</span>)}</div>
+      <div className="panel-copy"><h2>Step {step + 1} of {registrationSteps.length}: {registrationSteps[step]}</h2><p>{step === 0 && 'Provide your organization basic details'}{step === 1 && 'Add your registration details'}{step === 2 && 'Provide your representative information'}{step === 3 && 'Add your office address'}{step === 4 && 'Add your digital presence and branding'}</p></div>
+      <div className="form-card">
+        {renderRegistrationStep()}
+        <div className="form-actions"><button type="button" className="secondary-button" onClick={() => setView('home')}>Cancel</button><div className="form-actions-right">{step > 0 && <button type="button" className="secondary-button" onClick={previousStep}>Previous</button>}{step < registrationSteps.length - 1 ? <button type="button" className="primary-button" onClick={nextStep}>Next</button> : <button type="button" className="primary-button" onClick={submitRegistration}>Submit</button>}</div></div>
+      </div>
+    </section>
+  )
+
+  const renderSuccess = () => (
+    <section className="panel-page success-page">
+      {renderHeader('Identity OS — Registration Submitted')}
+      <div className="success-box">
+        <div className="success-status">Submitted successfully</div>
+        <h2>Organization registration request created</h2>
+        <div className="org-id-box"><span>Organization ID</span><strong>{successData?.orgId}</strong><small>Save this ID — you will need it to log in as Organization Admin</small></div>
+        <div className="meta-row"><div><label>Created</label><p>{successData?.createdAt}</p></div><div><label>Status</label><p>{successData?.status}</p></div></div>
+      </div>
+      <div className="success-actions"><button type="button" className="secondary-button" onClick={() => setView('home')}>Back to Home</button><button type="button" className="primary-button" onClick={() => setView('platform')}>Open Admin Portal</button></div>
+    </section>
+  )
+
+  const renderPlatformLogin = () => (
+    <section className="panel-page">
+      {renderHeader('Identity OS')}
+      <div className="panel-copy compact"><h2>Platform Admin</h2><p>Sign in to the Identity OS control plane</p></div>
+      <div className="form-card narrow">
+        <div className="step-row"><label>USERNAME<input value={platformLogin.username} onChange={(e) => setPlatformLogin((prev) => ({ ...prev, username: e.target.value }))} placeholder="admin" /></label></div>
+        <div className="step-row"><label>PASSWORD<input type="password" value={platformLogin.password} onChange={(e) => setPlatformLogin((prev) => ({ ...prev, password: e.target.value }))} placeholder="••••••••" /></label></div>
+        {platformLoginError && <div className="error-message">{platformLoginError}</div>}
+        <button type="button" className="primary-button" onClick={handlePlatformLogin}>Sign In</button>
+        <p className="hint-text">Default: admin / admin</p>
+      </div>
+    </section>
+  )
+
+  const renderPlatformDashboard = () => (
+    <div className="dashboard-shell">
+      {renderPlatformSidebar()}
+      <main className="dashboard-main">
+        <header className="dashboard-header"><div><div className="eyebrow">Platform Admin</div><h2>Pending Approvals</h2></div><button type="button" className="primary-button" onClick={() => setView('home')}>Sign Out</button></header>
+        <div className="tab-row"><button type="button" className="tab active">Pending Organizations</button><button type="button" className="tab">Pending Applications</button><button type="button" className="tab">Approved Organizations</button></div>
+        <div className="approval-list">{pendingOrganizations.map((org) => <div key={org.id} className="approval-card"><div><div className="approval-name">{org.name}</div><div className="approval-meta">{org.type} • {org.country} • {org.id}</div></div><div className="approval-actions"><button type="button" className="secondary-button" onClick={() => { setOrgApprovalModal({ type: 'org', item: org }); addAudit('Review Organization', `Reviewing ${org.name}`); }}>Review</button><button type="button" className="primary-button" onClick={() => { approveOrganization(org); addAudit('Approve Organization', `Approved ${org.name}`); }}>Approve</button></div></div>)}</div>
+        {applications.filter((app) => app.status === 'pending').length > 0 && <div className="approval-list app-list">{applications.filter((app) => app.status === 'pending').map((app) => <div key={app.id} className="approval-card"><div><div className="approval-name">{app.name}</div><div className="approval-meta">{app.orgName} • {app.type.toUpperCase()} app • {app.id}</div></div><div className="approval-actions"><button type="button" className="secondary-button" onClick={() => { setOrgApprovalModal({ type: 'app', item: app }); addAudit('Review Application', `Reviewing ${app.name}`); }}>Review</button><button type="button" className="primary-button" onClick={() => { approveApplication(app); addAudit('Approve Application', `Approved ${app.name}`); }}>Approve</button></div></div>)}</div>}
+            <div className="approval-list schema-list">{schemas.filter(s => s.status === 'pending').map((s) => (<div key={s.id} className="approval-card"><div><div className="approval-name">{s.name}</div><div className="approval-meta">{s.orgName} • Schema • {s.id}</div></div><div className="approval-actions"><button type="button" className="ghost-button" onClick={() => { setOrgApprovalModal({ type: 'schema', item: s }); addAudit('Review Schema', `Reviewing schema ${s.name}`); }}>View</button><button type="button" className="primary-button" onClick={() => { approveSchema(s); addAudit('Approve Schema', `Schema ${s.name} approved`); }}>Approve</button><button type="button" className="secondary-button" onClick={() => { rejectSchema(s); addAudit('Reject Schema', `Schema ${s.name} rejected`); }}>Reject</button></div></div>))}</div>
+      </main>
+      {orgApprovalModal && renderApprovalModal()}
+    </div>
+  )
+
+  const renderPlatformIdentityMgmt = () => (
+    <div className="dashboard-shell">
+      {renderPlatformSidebar()}
+      <main className="dashboard-main">
+        {renderHeader('Identity OS — Identity Management')}
+        <header className="dashboard-header"><div><div className="eyebrow">Platform Admin</div><h2>Identity Management</h2></div><button type="button" className="primary-button" onClick={() => setView('home')}>Sign Out</button></header>
+        <div className="panel-copy"><p>Manage identity stores, directories, and organization identity configuration.</p></div>
+        <div className="approval-list">{organizations.map((org) => (<div key={org.id} className="approval-card"><div><div className="approval-name">{org.name}</div><div className="approval-meta">{org.type || '—'} • {org.country || '—'} • {org.id}</div></div><div className="approval-actions"><button className="ghost-button" onClick={() => { setOrgApprovalModal({ type: 'org', item: org}); }}>View</button>{org.status === 'approved' ? <button className="secondary-button" onClick={() => suspendOrganization(org)}>Suspend</button> : org.status === 'suspended' ? <button className="primary-button" onClick={() => unsuspendOrganization(org)}>Unsuspend</button> : null}</div></div>))}</div>
+      </main>
+    </div>
+  )
+
+  const renderPlatformOrganizations = () => (
+    <div className="dashboard-shell">
+      {renderPlatformSidebar()}
+      <main className="dashboard-main">
+        {renderHeader('Identity OS — Organizations')}
+        <header className="dashboard-header"><div><div className="eyebrow">Platform Admin</div><h2>Organizations</h2></div><button type="button" className="primary-button" onClick={() => setView('home')}>Sign Out</button></header>
+        <div className="tab-row">{['All','Approved','Pending','Suspended','Rejected'].map((f) => <button key={f} type="button" className={`tab ${orgsFilter === f ? 'active' : ''}`} onClick={() => setOrgsFilter(f)}>{f}</button>)}</div>
+        <div className="approval-list">{organizations.filter((org) => {
+          if (orgsFilter === 'All') return true
+          if (orgsFilter === 'Approved') return org.status === 'approved'
+          if (orgsFilter === 'Pending') return org.status === 'pending'
+          if (orgsFilter === 'Suspended') return org.status === 'suspended'
+          if (orgsFilter === 'Rejected') return org.status === 'rejected'
+          return true
+        }).map((org) => (
+          <div key={org.id} className="approval-card">
+            <div>
+              <div className="approval-name">{org.name}</div>
+              <div className="approval-meta">{org.type || '—'} • {org.country || '—'} • {org.id}</div>
+            </div>
+            <div className="approval-actions">
+              <button type="button" className="ghost-button" onClick={() => { setOrgApprovalModal({ type: 'org', item: org }); addAudit('View Organization', `Viewed ${org.name}`); }}>View</button>
+              {org.status === 'pending' && <button type="button" className="primary-button" onClick={() => { approveOrganization(org); addAudit('Approve Organization', `Approved ${org.name}`); }}>Approve</button>}
+              {org.status === 'pending' && <button type="button" className="secondary-button" onClick={() => { rejectOrganization(org); addAudit('Reject Organization', `Rejected ${org.name}`); }}>Reject</button>}
+              {org.status === 'approved' && <button type="button" className="secondary-button" onClick={() => { suspendOrganization(org); addAudit('Suspend Organization', `Suspended ${org.name}`); }}>Suspend</button>}
+              {org.status === 'suspended' && <button type="button" className="primary-button" onClick={() => { unsuspendOrganization(org); addAudit('Unsuspend Organization', `Unsuspended ${org.name}`); }}>Unsuspend</button>}
+            </div>
+          </div>
+        ))}</div>
+      </main>
+      {orgApprovalModal && renderApprovalModal()}
+    </div>
+  )
+
+  const renderOrganizationLogin = () => (
+    <section className="panel-page">
+      {renderHeader('Identity OS')}
+      <div className="progress-indicator three-step">{[1, 2, 3].map((n) => <span key={n} className={`progress-dot ${orgLoginStage === n ? 'active' : ''}`}>{n}</span>)}</div>
+      <div className="panel-copy compact"><h2>Organization Admin</h2><p>{orgLoginStage === 1 && 'Enter your Organization ID'}{orgLoginStage === 2 && 'Choose a verification channel'}{orgLoginStage === 3 && 'Enter the OTP received'}</p></div>
+      <div className="form-card narrow">
+        {orgLoginStage === 1 && <><div className="step-row"><label>ORGANIZATION ID<input value={orgLoginId} onChange={(e) => setOrgLoginId(e.target.value)} placeholder="org_xxxxxxxx" /></label></div>{orgLoginError && <div className="error-message">{orgLoginError}</div>}<button type="button" className="primary-button" onClick={handleOrgLoginSubmit}>Continue</button><p className="hint-text">Demo: org_7k3m9p2x</p></>}
+        {orgLoginStage === 2 && <><div className="channel-list"><button type="button" className={`channel-option ${orgLoginChannel === 'email' ? 'selected' : ''}`} onClick={() => setOrgLoginChannel('email')}>Email OTP • ad****@technova.io</button><button type="button" className={`channel-option ${orgLoginChannel === 'mobile' ? 'selected' : ''}`} onClick={() => setOrgLoginChannel('mobile')}>Mobile OTP • +91-•••••43210</button></div><button type="button" className="primary-button" onClick={handleOrgLoginSubmit}>Continue</button></>}
+        {orgLoginStage === 3 && <><div className="step-row"><label>ENTER OTP<input value={orgOtp} onChange={(e) => setOrgOtp(e.target.value)} placeholder="123456" /></label></div>{orgLoginError && <div className="error-message">{orgLoginError}</div>}<button type="button" className="primary-button" onClick={handleOrgLoginSubmit}>Verify OTP</button><p className="hint-text">Demo: any 6-digit code except 000000</p></>}
+      </div>
+    </section>
+  )
+
+  const renderPlatformSchema = () => (
+    <div className="dashboard-shell">
+      {renderPlatformSidebar()}
+      <main className="dashboard-main">
+        {renderHeader('Identity OS — Schema Approvals')}
+        <header className="dashboard-header"><div><div className="eyebrow">Platform Admin</div><h2>Schema Approvals</h2></div><button type="button" className="primary-button" onClick={() => setView('home')}>Sign Out</button></header>
+        <div className="panel-copy"><p>Review and approve schema definitions submitted by organizations.</p></div>
+        <div className="approval-list schema-list">{schemas.map((s) => (<div key={s.id} className="approval-card"><div><div className="approval-name">{s.name}</div><div className="approval-meta">{s.orgName} • Schema • {s.id}</div></div><div className="approval-actions"><button type="button" className="ghost-button" onClick={() => setOrgApprovalModal({ type: 'schema', item: s })}>View</button>{s.status === 'pending' && <button type="button" className="primary-button" onClick={() => { approveSchema(s); addAudit('Approve Schema', `Schema ${s.name} approved`); }}>Approve</button>}{s.status === 'pending' && <button type="button" className="secondary-button" onClick={() => { rejectSchema(s); addAudit('Reject Schema', `Schema ${s.name} rejected`); }}>Reject</button>}{s.status === 'approved' && <span className="nav-badge" style={{background:'#34d399'}}>Approved</span>}{s.status === 'rejected' && <span className="nav-badge" style={{background:'#ef4444'}}>Rejected</span>}</div></div>))}</div>
+      </main>
+      {requestModal && (
+        <div className="modal-backdrop" onClick={() => setRequestModal(null)}><div className="modal-card" onClick={(e) => e.stopPropagation()}><div className="modal-header"><h3>Request More Information</h3><button type="button" className="close-button" onClick={() => setRequestModal(null)}>×</button></div><div className="form-card"><label>Message<textarea value={requestModal?.message || ''} onChange={(e) => setRequestModal((prev) => ({ ...prev, message: e.target.value }))} rows={4} /></label><div style={{display:'flex',gap:12,justifyContent:'flex-end',marginTop:12}}><button className="secondary-button" onClick={() => setRequestModal(null)}>Cancel</button><button className="primary-button" onClick={() => { if (requestModal && requestModal.target) { requestMoreInfo(requestModal.target, requestModal.message || 'Please provide additional documentation'); addAudit('Request More Info', `Requested more info for ${requestModal.target.name || requestModal.target.id}`); } setRequestModal(null); }}>Send</button></div></div></div></div>
+      )}
+    </div>
+  )
+
+  const renderApprovalModal = () => {
+    if (!orgApprovalModal) return null
+    const item = orgApprovalModal.item
+    return (
+      <div className="modal-backdrop" onClick={() => setOrgApprovalModal(null)}>
+        <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-header">
+            <h3>{orgApprovalModal.type === 'org' ? 'Organization Review' : orgApprovalModal.type === 'app' ? 'Application Review' : orgApprovalModal.type === 'schema' ? 'Schema Review' : 'Review'}</h3>
+            <button type="button" className="close-button" onClick={() => setOrgApprovalModal(null)}>×</button>
+          </div>
+
+          {orgApprovalModal.type === 'schema' ? (
+            <>
+              <div className="review-block"><label>Schema</label><p>{item.name}</p></div>
+              <div className="review-block"><label>Organization</label><p>{item.orgName} • {item.orgId}</p></div>
+              <div className="review-block"><label>Fields</label><p>{(item.fields || []).join(', ')}</p></div>
+              <div className="review-block"><label>Created</label><p>{item.createdAt}</p></div>
+              <div className="review-block"><label>Status</label><p>{item.status}</p></div>
+              <div className="modal-actions">
+                {item.status !== 'approved' && <button type="button" className="primary-button" onClick={() => approveSchema(item)}>Approve</button>}
+                {item.status === 'pending' && <button type="button" className="secondary-button" onClick={() => rejectSchema(item)}>Reject</button>}
+              </div>
+            </>
+          ) : orgApprovalModal.type === 'app' ? (
+            <>
+              <div className="review-block"><label>Application</label><p>{item.name}</p></div>
+              <div className="review-block"><label>Organization</label><p>{item.orgName} • {item.orgId || '—'}</p></div>
+              <div className="review-block"><label>Type</label><p>{item.type}</p></div>
+              <div className="review-block"><label>Status</label><p>{item.status}</p></div>
+              <div className="modal-actions">
+                {item.status !== 'approved' && <button type="button" className="primary-button" onClick={() => approveApplication(item)}>Approve</button>}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="review-block"><label>Name</label><p>{item.name}</p></div>
+              <div className="review-block"><label>Type</label><p>{item.type}</p></div>
+              <div className="review-block"><label>Identifier</label><p>{item.id}</p></div>
+              <div className="review-block"><label>Registration Details</label><p>{item.registrationDetails ? JSON.stringify(item.registrationDetails) : '—'}</p></div>
+              <div className="review-block"><label>Representative</label><p>{item.representative ? `${item.representative.name} • ${item.representative.email} • ${item.representative.mobile}` : '—'}</p></div>
+              <div className="review-block"><label>Documents</label><p>{(item.documents || []).length > 0 ? (item.documents.map(d => d.name).join(', ')) : '—'}</p></div>
+              <div className="review-block"><label>Submitted</label><p>{item.submittedAt || '—'}</p></div>
+              <div className="review-block"><label>Verification Status</label><p>{item.status}</p></div>
+              <div className="modal-actions">
+                {item.status !== 'approved' && item.status !== 'suspended' && <button type="button" className="primary-button" onClick={() => approveOrganization(item)}>Approve</button>}
+                {item.status === 'approved' && <button type="button" className="secondary-button" onClick={() => suspendOrganization(item)}>Suspend</button>}
+                {item.status === 'suspended' && <button type="button" className="primary-button" onClick={() => unsuspendOrganization(item)}>Unsuspend</button>}
+                {item.status === 'pending' && <button type="button" className="secondary-button" onClick={() => rejectOrganization(item)}>Reject</button>}
+                {item.status === 'pending' && <button type="button" className="ghost-button" onClick={() => setRequestModal({ target: item, open: true })}>Request More Information</button>}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  const renderCredentialModal = () => {
+    if (!orgCredentialModal) return null
+    const { org, username, password } = orgCredentialModal
+    return (
+      <div className="modal-backdrop" onClick={() => setOrgCredentialModal(null)}>
+        <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-header">
+            <h3>Organization Admin Credentials</h3>
+            <button type="button" className="close-button" onClick={() => setOrgCredentialModal(null)}>×</button>
+          </div>
+          <div className="form-card">
+            <div className="review-block"><label>Organization</label><p>{org.name} • {org.id}</p></div>
+            <div className="review-block"><label>Username</label><p><code style={{background:'rgba(0,0,0,0.25)',padding:'4px 8px',borderRadius:6}}>{username}</code></p></div>
+            <div className="review-block"><label>Password</label><p><code style={{background:'rgba(0,0,0,0.25)',padding:'4px 8px',borderRadius:6}}>{password}</code></p></div>
+            <div style={{display:'flex',justifyContent:'flex-end',gap:12,marginTop:12}}>
+              <button className="secondary-button" onClick={() => { try { navigator.clipboard.writeText(`username: ${username}\npassword: ${password}`); alert('Credentials copied to clipboard') } catch (e) { alert('Unable to copy to clipboard in this environment') } }}>Copy</button>
+              <button className="primary-button" onClick={() => setOrgCredentialModal(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  function RegistrationBuilder() {
+    const [fields, setFields] = useState(() => {
+      try { const saved = JSON.parse(localStorage.getItem('registration_builder')) ; return saved || [{ name: 'fullName', label: 'Full Name', type: 'text', required: true }]
+      } catch (e) { return [{ name: 'fullName', label: 'Full Name', type: 'text', required: true }] }
+    })
+    const [selectedIndex, setSelectedIndex] = useState(0)
+
+    const addField = (type) => {
+      const f = { name: `${type}_${Date.now().toString().slice(-4)}`, label: type.charAt(0).toUpperCase() + type.slice(1), type, required: false }
+      setFields(prev => { const next = [...prev, f]; localStorage.setItem('registration_builder', JSON.stringify(next)); return next })
+    }
+    const updateField = (idx, patch) => setFields(prev => { const copy = [...prev]; copy[idx] = { ...copy[idx], ...patch }; localStorage.setItem('registration_builder', JSON.stringify(copy)); return copy })
+    const moveUp = (idx) => { if (idx === 0) return; setFields(prev => { const copy = [...prev]; const tmp = copy[idx-1]; copy[idx-1]=copy[idx]; copy[idx]=tmp; localStorage.setItem('registration_builder', JSON.stringify(copy)); return copy }) }
+    const removeField = (idx) => setFields(prev => { const copy = prev.filter((_,i)=>i!==idx); localStorage.setItem('registration_builder', JSON.stringify(copy)); return copy })
+
+    return (
+      <section className="panel-page">
+        {renderHeader('Registration Form Builder')}
+        <div className="builder-grid">
+          <div className="builder-palette form-card">
+            <h4>Available Fields</h4>
+            {['text','email','phone','password','date','dropdown','checkbox','address','file','gov-id','custom'].map((t)=> (
+              <button key={t} className="ghost-button" draggable onDragStart={(e)=> e.dataTransfer.setData('text/plain', t)} onClick={() => addField(t)}>{t}</button>
+            ))}
+          </div>
+          <div className="builder-preview form-card" onDragOver={(e)=>e.preventDefault()} onDrop={(e)=>{ e.preventDefault(); const t = e.dataTransfer.getData('text/plain'); if (t) addField(t); }}>
+            <h4>Live Preview</h4>
+            <form>
+              {fields.map((f, idx) => {
+                  const control = f.type === 'dropdown' ? (<select>{(f.options||['Option 1']).map((o,oi)=>(<option key={oi}>{o}</option>))}</select>) : f.type === 'checkbox' ? (<input type="checkbox" />) : (<input placeholder={f.label} />)
+                  return (
+                    <div key={f.name} className="field-row" onDragOver={(e)=>e.preventDefault()} onDrop={(e)=>{ e.preventDefault(); const src = e.dataTransfer.getData('text/index'); if (src) { const s = Number(src); if (!Number.isNaN(s) && s !== idx) { const copy = [...fields]; const [moved] = copy.splice(s,1); copy.splice(idx,0,moved); setFields(copy); localStorage.setItem('registration_builder', JSON.stringify(copy)); setSelectedIndex(idx); } } }}>
+                      <span className="drag-handle" draggable onDragStart={(e)=>{ e.dataTransfer.setData('text/index', String(idx)); }} title="Drag to reorder">⋮</span>
+                      <div style={{flex:1}}>
+                        <label style={{ display: 'block', fontSize: 12, opacity: 0.8 }}>{f.label}{f.required ? ' *' : ''}</label>
+                        {control}
+                      </div>
+                    </div>
+                  )
+                })}
+            </form>
+            <div style={{marginTop:12}}><h5>Generated JSON</h5><pre style={{whiteSpace:'pre-wrap',maxHeight:200,overflow:'auto',background:'#071127',padding:12,borderRadius:8}}>{JSON.stringify({ registrationFields: fields }, null, 2)}</pre></div>
+          </div>
+          <div className="builder-config form-card">
+            <h4>Field Configuration</h4>
+            {fields.length===0 ? <p>No fields. Add one from left.</p> : (
+              <>
+                <div style={{display:'flex',gap:8}}>{fields.map((f,idx)=><button key={f.name} className={`ghost-button ${selectedIndex===idx?'active':''}`} onClick={()=>setSelectedIndex(idx)}>{f.label}</button>)}</div>
+                <div style={{marginTop:12}}>
+                  <label>Field Label<input value={fields[selectedIndex]?.label||''} onChange={(e)=>updateField(selectedIndex,{label:e.target.value})} /></label>
+                  <label>Field Name<input value={fields[selectedIndex]?.name||''} onChange={(e)=>updateField(selectedIndex,{name:e.target.value})} /></label>
+                  <label>Required<select value={fields[selectedIndex]?.required? 'yes':'no'} onChange={(e)=>updateField(selectedIndex,{required:e.target.value==='yes'})}><option value="no">Optional</option><option value="yes">Required</option></select></label>
+                  <label>Validation Regex<input value={fields[selectedIndex]?.regex||''} onChange={(e)=>updateField(selectedIndex,{regex:e.target.value})} placeholder="^\\w+@\\w+\\.com$" /></label>
+                  <label>Verification<select value={fields[selectedIndex]?.verification||''} onChange={(e)=>updateField(selectedIndex,{verification:e.target.value})}><option value="">None</option><option value="otp">OTP</option><option value="identity">Identity Verification</option></select></label>
+                  <label><input type="checkbox" checked={!!fields[selectedIndex]?.encrypted} onChange={(e)=>updateField(selectedIndex,{encrypted:e.target.checked})} /> Encrypt this field</label>
+
+                  {/* Dropdown options editor */}
+                  {fields[selectedIndex]?.type === 'dropdown' && (
+                    <div style={{marginTop:10}}>
+                      <label style={{display:'block',marginBottom:8}}>Options</label>
+                      <div style={{display:'grid',gap:8}}>
+                        {(fields[selectedIndex]?.options || ['Option 1']).map((opt, oi) => (
+                          <div key={oi} style={{display:'flex',gap:8,alignItems:'center'}}>
+                            <input value={opt} onChange={(e)=>{ const copy = [...fields]; copy[selectedIndex] = { ...copy[selectedIndex], options: (copy[selectedIndex].options||[]).map((o, idx) => idx===oi ? e.target.value : o) }; setFields(copy); localStorage.setItem('registration_builder', JSON.stringify(copy)); }} />
+                            <button className="ghost-button" onClick={()=>{ const copy=[...fields]; const arr = copy[selectedIndex].options? [...copy[selectedIndex].options] : (copy[selectedIndex].options=[] , ['Option 1']); arr.splice(oi,1); copy[selectedIndex] = { ...copy[selectedIndex], options: arr }; setFields(copy); localStorage.setItem('registration_builder', JSON.stringify(copy)); }}>Remove</button>
+                          </div>
+                        ))}
+                        <button className="ghost-button" onClick={()=>{ const copy=[...fields]; const arr = copy[selectedIndex].options? [...copy[selectedIndex].options] : []; arr.push(`Option ${arr.length+1}`); copy[selectedIndex] = { ...copy[selectedIndex], options: arr }; setFields(copy); localStorage.setItem('registration_builder', JSON.stringify(copy)); }}>Add Option</button>
+                      </div>
+                    </div>
+                  )}
+                  <div style={{display:'flex',gap:8,marginTop:8}}><button className="secondary-button" onClick={()=>moveUp(selectedIndex)}>Move Up</button><button className="secondary-button" onClick={()=>removeField(selectedIndex)}>Remove</button></div>
+                </div>
+                <div style={{marginTop:12,display:'flex',flexDirection:'column',gap:8}}>
+                  <input placeholder="Schema name (e.g., Customer Signup)" value={localStorage.getItem('registration_builder_schema_name')||''} onChange={(e)=>{ const name=e.target.value; /* store transient name in localStorage separately */ localStorage.setItem('registration_builder_schema_name', name); }} />
+                  <div style={{display:'flex',gap:8}}><button className="primary-button" onClick={()=>{ localStorage.setItem('registration_builder', JSON.stringify(fields)); alert('Saved registration form schema to localStorage') }}>Save Draft</button><button className="ghost-button" onClick={()=>{ const schemaName = localStorage.getItem('registration_builder_schema_name') || `Schema_${Date.now()}`; const preview = { id: `schema_preview_${Date.now()}`, name: schemaName, orgId: null, orgName: (currentOrg && currentOrg.name) || 'Unassigned', fields: fields.map(f=>({ name:f.name, label:f.label, type:f.type, required:!!f.required, regex:f.regex||null, verification:f.verification||null, encrypted:!!f.encrypted, options:f.options||[] })), status: 'preview', createdAt: new Date().toLocaleString() }; setPublishModal(preview); }}>Publish</button></div></div>
+              </>
+            )}
+          </div>
+        </div>
+      </section>
+    )
+  }
+
+  // expose registration builder view mapping
+  // when view === 'org-registration-builder', render the component
+  const renderOrgAdminDashboard = () => (
+    <div className="org-dashboard-shell">
+      <aside className="org-sidebar"><div className="sidebar-header">Identity OS</div><nav>{orgAdminMenu.map((item) => <button type="button" key={item} className={`menu-item ${item === 'Dashboard' ? 'active' : ''}`} onClick={() => { if (item === 'Registration Builder') { setView('org-registration-builder') } }}>{item}</button>)}</nav></aside>
+      <main className="org-main">
+        <header className="org-main-header"><div><div className="eyebrow">Organization Admin</div><h2>{currentOrg?.name || 'TechNova Solutions'} Overview</h2></div><div style={{display:'flex',gap:12}}><button type="button" className="secondary-button" onClick={() => setView('home')}>Sign Out</button><button type="button" className="primary-button" onClick={() => setView('org-registration-builder')}>Open Registration Builder</button></div></header>
+        <section className="kpi-grid">
+          <div className="kpi-card"><strong>{100 + (applications.length || 0)}</strong><span>Total Users</span></div>
+          <div className="kpi-card"><strong>{Math.max(0, 80)}</strong><span>Active Users</span></div>
+          <div className="kpi-card"><strong>{applications.length}</strong><span>Applications</span></div>
+          <div className="kpi-card"><strong>{pendingOrganizations.length}</strong><span>Registration Requests</span></div>
+          <div className="kpi-card"><strong>{4200}</strong><span>Login Attempts</span></div>
+          <div className="kpi-card"><strong>{3}</strong><span>Security Alerts</span></div>
+        </section>
+        <section className="chart-grid"><div className="chart-card large"><h4>User Registration Trend</h4><div className="chart-bars">{[20, 40, 55, 70, 80, 95].map((value) => <span key={value} style={{ height: `${value}%` }} />)}</div></div><div className="chart-card"><h4>Login Success vs Failure</h4><div className="donut-wrapper"><div className="donut" /></div></div><div className="chart-card"><h4>Authentication Methods</h4><ul className="mini-list"><li>Password 60%</li><li>OTP 30%</li><li>SSO 10%</li></ul></div><div className="chart-card wide"><h4>Recent Activity</h4><ul className="activity-list">{(applications.slice(0,5)).map(a => <li key={a.id}>{a.orgName} requested {a.name}</li>)}</ul></div></section>
+      </main>
+    </div>
+  )
+
+  const renderPublishModal = () => {
+    if (!publishModal) return null
+    return (
+      <div className="modal-backdrop" onClick={() => setPublishModal(null)}>
+        <div className="modal-card" onClick={(e)=>e.stopPropagation()}>
+          <div className="modal-header"><h3>Publish Schema</h3><button className="close-button" onClick={()=>setPublishModal(null)}>×</button></div>
+          <div className="form-card">
+            <div className="review-block"><label>Name</label><p>{publishModal.name}</p></div>
+            <div className="review-block"><label>Fields</label><p>{publishModal.fields.map(f=>f.label).join(', ')}</p></div>
+            <div style={{display:'flex',justifyContent:'flex-end',gap:8}}>
+              <button className="secondary-button" onClick={()=>setPublishModal(null)}>Cancel</button>
+              <button className="primary-button" onClick={()=>{
+                const newSchema = { id: `schema_${Date.now()}`, name: publishModal.name, orgId: (currentOrg && currentOrg.id) || null, orgName: (currentOrg && currentOrg.name) || 'Unassigned', fields: publishModal.fields, status: 'published', createdAt: new Date().toLocaleString() }
+                setSchemas(prev=>[newSchema,...prev])
+                addAudit('Publish Schema', `Published schema ${newSchema.name}`)
+                if (currentOrg && currentOrg.id) { setOrganizations(prev => prev.map(o => o.id === currentOrg.id ? ({ ...o, registrationSchemas: [...(o.registrationSchemas||[]), newSchema] }) : o)); }
+                setPublishModal(null)
+                alert('Schema published successfully')
+              }}>Confirm Publish</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <main className="app-shell">
+      {view === 'home' && renderHome()}
+      {view === 'registration' && renderRegistration()}
+      {view === 'success' && renderSuccess()}
+      {view === 'platform' && renderPlatformLogin()}
+      {view === 'platform-dashboard' && renderPlatformDashboard()}
+      {view === 'platform-organizations' && renderPlatformOrganizations()}
+      {view === 'platform-approved' && renderPlatformOrganizations()}
+      {view === 'platform-audit' && renderPlatformAudit()}
+      {view === 'platform-identity-mgmt' && renderPlatformIdentityMgmt()}
+      {view === 'platform-settings' && renderPlatformOrganizations()}
+      {view === 'platform-schema' && renderPlatformSchema && renderPlatformSchema()}
+      {view === 'organization' && renderOrganizationLogin()}
+      {view === 'org-registration-builder' && <RegistrationBuilder />}
+      {view === 'organization-dashboard' && renderOrgAdminDashboard()}
+
+      {/* global modals */}
+      {orgApprovalModal && renderApprovalModal()}
+      {orgCredentialModal && renderCredentialModal()}
+      {publishModal && renderPublishModal()}
+    </main>
+  )
+}
+
+export default App
