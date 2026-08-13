@@ -803,18 +803,58 @@ textarea {
   width:28px;
   height:28px;
   border-radius:6px;
-  background: rgba(255,255,255,0.02);
+ background: rgba(255,255,255,0.03);
   margin-right:8px;
   cursor:grab;
+ border: 1px solid rgba(255,255,255,0.03);
 }
-
+ 
 .builder-preview .field-row {
   display:flex;
   align-items:center;
-  gap:8px;
-  padding:8px 10px;
-  border:1px dashed rgba(148,163,184,0.06);
-  border-radius:8px;
+  gap:12px;
+  padding:12px 14px;
+  border:1px solid rgba(148,163,184,0.06);
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  border-radius:12px;
+  box-shadow: 0 6px 18px rgba(2,6,23,0.4);
+}
+
+.builder-preview .field-row:active,
+.builder-preview .field-row.dragging {
+  opacity: 0.85;
+  transform: scale(0.995);
+}
+
+.builder-preview .field-row.drop-target {
+  border-color: rgba(96,165,250,0.7);
+  background: linear-gradient(180deg, rgba(96,165,250,0.04), rgba(255,255,255,0.01));
+}
+
+/* Make builder panels visually closer to Figma layout */
+.builder-palette .form-card,
+.builder-preview.form-card,
+.builder-config.form-card {
+  padding: 20px;
+  border-radius: 14px;
+}
+
+.builder-config .ghost-button.active {
+  background: linear-gradient(90deg, rgba(59,130,246,0.14), rgba(96,165,250,0.06));
+}
+
+.builder-palette .ghost-button {
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+
+.builder-palette .ghost-button:hover {
+  background: rgba(255,255,255,0.02);
+}
+
+.builder-preview h4, .builder-config h4, .builder-palette h4 {
+  color: #dff4ff;
 }
 
 .builder-palette {

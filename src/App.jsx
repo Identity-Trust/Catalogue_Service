@@ -57,6 +57,10 @@ function App() {
     try { const raw = localStorage.getItem('catalogue_audit_v1'); return raw ? JSON.parse(raw) : [] } catch(e) { return [] }
   })
 
+  const [loginPolicies, setLoginPolicies] = useState(() => {
+    try { const raw = localStorage.getItem('catalogue_login_policies_v1'); return raw ? JSON.parse(raw) : [] } catch(e) { return [] }
+  })
+
   const addAudit = (action, details) => {
     const entry = { id: `audit_${Date.now()}`, action, details, timestamp: new Date().toLocaleString() }
     setAuditLogs(prev => [entry, ...prev])
@@ -195,6 +199,8 @@ function App() {
   const [orgCredentialModal, setOrgCredentialModal] = useState(null)
   // publish modal for registration builder
   const [publishModal, setPublishModal] = useState(null)
+  // publish modal for login policies
+  const [loginPublishModal, setLoginPublishModal] = useState(null)
 
   useEffect(() => {
     // save key parts of app state to localStorage on change
@@ -205,7 +211,7 @@ function App() {
     } catch (e) {
       // ignore
     }
-  }, [organizations, pendingOrganizations, approvedOrganizations, applications, schemas, auditLogs])
+  }, [organizations, pendingOrganizations, approvedOrganizations, applications, schemas, auditLogs, loginPolicies])
 
   const suspendOrganization = (org) => {
     setOrganizations((prev) => prev.map((i) => (i.id === org.id ? { ...i, status: 'suspended', suspendedAt: new Date().toLocaleString() } : i)))
@@ -690,12 +696,12 @@ function App() {
 
   // expose registration builder view mapping
   // when view === 'org-registration-builder', render the component
+  
   const renderOrgAdminDashboard = () => (
     <div className="org-dashboard-shell">
-      <aside className="org-sidebar"><div className="sidebar-header">Identity OS</div><nav>{orgAdminMenu.map((item) => <button type="button" key={item} className={`menu-item ${item === 'Dashboard' ? 'active' : ''}`} onClick={() => { if (item === 'Registration Builder') { setView('org-registration-builder') } }}>{item}</button>)}</nav></aside>
+      <aside className="org-sidebar"><div className="sidebar-header">Identity OS</div><nav>{orgAdminMenu.map((item) => <button type="button" key={item} className={`menu-item ${item === 'Dashboard' ? 'active' : ''}`} onClick={() => { if (item === 'Registration Builder') { setView('org-registration-builder') } else if (item === 'Login Configuration') { setView('org-login-builder') } }}>{item}</button>)}</nav></aside>
       <main className="org-main">
-        <header className="org-main-header"><div><div className="eyebrow">Organization Admin</div><h2>{currentOrg?.name || 'TechNova Solutions'} Overview</h2></div><div style={{display:'flex',gap:12}}><button type="button" className="secondary-button" onClick={() => setView('home')}>Sign Out</button><button type="button" className="primary-button" onClick={() => setView('org-registration-builder')}>Open Registration Builder</button></div></header>
-        <section className="kpi-grid">
+        <header className="org-main-header"><div><div className="eyebrow">Organization Admin</div><h2>{currentOrg?.name || 'TechNova Solutions'} Overview</h2></div><div style={{display:'flex',gap:12}}><button type="button" className="secondary-button" onClick={() => setView('home')}>Sign Out</button><button type="button" className="primary-button" onClick={() => setView('org-registration-builder')}>Open Registration Builder</button></div></header>        <section className="kpi-grid">
           <div className="kpi-card"><strong>{100 + (applications.length || 0)}</strong><span>Total Users</span></div>
           <div className="kpi-card"><strong>{Math.max(0, 80)}</strong><span>Active Users</span></div>
           <div className="kpi-card"><strong>{applications.length}</strong><span>Applications</span></div>
@@ -734,6 +740,181 @@ function App() {
     )
   }
 
+  const renderLoginPublishModal = () => {
+    if (!loginPublishModal) return null
+    const defaultSelection = loginPublishModal.orgId || 'GLOBAL'
+    return (
+      <div className="modal-backdrop" onClick={() => setLoginPublishModal(null)}>
+        <div className="modal-card" onClick={(e)=>e.stopPropagation()}>
+          <div className="modal-header"><h3>Publish Login Policy</h3><button className="close-button" onClick={()=>setLoginPublishModal(null)}>×</button></div>
+          <div className="form-card">
+            <div className="review-block"><label>Policy</label><p>{loginPublishModal.name}</p></div>
+            <div className="review-block"><label>Authentication Methods</label><p>{(loginPublishModal.authenticationMethods||[]).join(', ')}</p></div>
+            <div className="review-block"><label>Target Organization</label>
+              <select defaultValue={defaultSelection} onChange={(e)=>{ const val = e.target.value; setLoginPublishModal(prev => ({ ...prev, orgId: val === 'GLOBAL' ? null : val })) }}>
+                <option value="GLOBAL">Global (no org)</option>
+                {organizations.map(o => <option key={o.id} value={o.id}>{o.name} — {o.id}</option>)}
+              </select>
+            </div>
+            <div style={{display:'flex',justifyContent:'flex-end',gap:8}}>
+              <button className="secondary-button" onClick={()=>setLoginPublishModal(null)}>Cancel</button>
+              <button className="primary-button" onClick={()=>{
+                const policy = { ...loginPublishModal, id: loginPublishModal.id || `policy_${Date.now()}`, createdAt: new Date().toLocaleString() }
+                try {
+                  const raw = localStorage.getItem('catalogue_login_policies_v1')
+                  const existing = raw ? JSON.parse(raw) : []
+                  const next = [policy, ...existing]
+                  localStorage.setItem('catalogue_login_policies_v1', JSON.stringify(next))
+                  setLoginPolicies(next)
+                  addAudit('Publish Login Policy', `Published login policy ${policy.name} for ${policy.orgId || 'Global'}`)
+                  setLoginPublishModal(null)
+                  alert('Login policy published')
+                } catch (e) { alert('Failed to persist policy: '+String(e)) }
+              }}>Confirm Publish</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  function LoginBuilder() {
+    const authOptions = [
+      { key: 'PASSWORD', label: 'Username + Password' },
+      { key: 'EMAIL_PASSWORD', label: 'Email + Password' },
+      { key: 'MOBILE_OTP', label: 'Mobile OTP' },
+      { key: 'EMAIL_OTP', label: 'Email OTP' },
+      { key: 'BIOMETRIC', label: 'Biometric' },
+      { key: 'SOCIAL', label: 'Social Login' },
+      { key: 'HARDWARE', label: 'Hardware Token' },
+    ]
+
+    const [selectedMethods, setSelectedMethods] = useState(() => {
+      try { const raw = localStorage.getItem('catalogue_login_builder_methods'); return raw ? JSON.parse(raw) : ['PASSWORD'] } catch(e) { return ['PASSWORD'] }
+    })
+    const [flowSteps, setFlowSteps] = useState(() => {
+      try { const raw = localStorage.getItem('catalogue_login_builder_flow'); return raw ? JSON.parse(raw) : ['Identifier','Identity Lookup','Authentication Verification','MFA Check','Success'] } catch(e) { return ['Identifier','Identity Lookup','Authentication Verification','MFA Check','Success'] }
+    })
+    const [mfaEnabled, setMfaEnabled] = useState(() => { try { const raw = localStorage.getItem('catalogue_login_builder_mfa'); return raw ? JSON.parse(raw) : true } catch(e) { return true } })
+    const [mfaMethods, setMfaMethods] = useState(() => { try { const raw = localStorage.getItem('catalogue_login_builder_mfa_methods'); return raw ? JSON.parse(raw) : ['OTP'] } catch(e) { return ['OTP'] } })
+    const [riskAuth, setRiskAuth] = useState(() => { try { const raw = localStorage.getItem('catalogue_login_builder_risk'); return raw ? JSON.parse(raw) : false } catch(e) { return false } })
+    const [policyName, setPolicyName] = useState(() => localStorage.getItem('catalogue_login_builder_policy_name') || `Login Policy ${new Date().toLocaleDateString()}`)
+
+    const toggleMethod = (key) => {
+      setSelectedMethods((prev) => {
+        const next = prev.includes(key) ? prev.filter((p)=>p!==key) : [...prev, key]
+        localStorage.setItem('catalogue_login_builder_methods', JSON.stringify(next))
+        return next
+      })
+    }
+
+    const moveStep = (idx, dir) => {
+      setFlowSteps((prev) => {
+        const copy = [...prev]
+        const t = copy.splice(idx,1)[0]
+        copy.splice(idx + dir, 0, t)
+        localStorage.setItem('catalogue_login_builder_flow', JSON.stringify(copy))
+        return copy
+      })
+    }
+
+    const toggleMfaMethod = (m) => {
+      setMfaMethods((prev) => {
+        const next = prev.includes(m) ? prev.filter(x=>x!==m) : [...prev, m]
+        localStorage.setItem('catalogue_login_builder_mfa_methods', JSON.stringify(next))
+        return next
+      })
+    }
+
+    const saveDraft = () => {
+      const draft = { id: `draft_${Date.now()}`, name: policyName, authenticationMethods: selectedMethods, mfa: mfaEnabled, mfaMethods, riskAuthentication: riskAuth, flow: flowSteps, orgId: (currentOrg && currentOrg.id) || null, createdAt: new Date().toLocaleString() }
+      // store as transient draft in localStorage
+      localStorage.setItem('catalogue_login_builder_draft', JSON.stringify(draft))
+      alert('Draft saved locally')
+    }
+
+    const publishPolicy = () => {
+      // open publish modal so user can select org target (or Global)
+      const policy = { id: `policy_${Date.now()}`, name: policyName, authenticationMethods: selectedMethods, mfa: mfaEnabled, mfaMethods, riskAuthentication: riskAuth, flow: flowSteps, orgId: (currentOrg && currentOrg.id) || null, createdAt: new Date().toLocaleString() }
+      setLoginPublishModal(policy)
+    }
+
+    const generatedJSON = JSON.stringify({ authenticationMethods: selectedMethods, mfa: mfaEnabled, mfaMethods, riskAuthentication: riskAuth, flow: flowSteps }, null, 2)
+
+    return (
+      <section className="panel-page">
+        {renderHeader('Login Page Builder')}
+        <div className="builder-grid">
+          <div className="builder-palette form-card">
+            <h4>Authentication Methods</h4>
+            {authOptions.map((opt) => (
+              <label key={opt.key} style={{display:'block',marginBottom:8}}>
+                <input type="checkbox" checked={selectedMethods.includes(opt.key)} onChange={()=>toggleMethod(opt.key)} /> {opt.label}
+              </label>
+            ))}
+            <div style={{marginTop:12}}>
+              <h5>MFA</h5>
+              <label style={{display:'block'}}><input type="checkbox" checked={mfaEnabled} onChange={(e)=>{ setMfaEnabled(e.target.checked); localStorage.setItem('catalogue_login_builder_mfa', JSON.stringify(e.target.checked)) }} /> Enable MFA</label>
+              {mfaEnabled && (
+                <div style={{marginTop:8}}>
+                  <label style={{display:'block'}}><input type="checkbox" checked={mfaMethods.includes('OTP')} onChange={()=>toggleMfaMethod('OTP')} /> OTP Verification</label>
+                  <label style={{display:'block'}}><input type="checkbox" checked={mfaMethods.includes('AUTH_APP')} onChange={()=>toggleMfaMethod('AUTH_APP')} /> Authenticator App</label>
+                  <label style={{display:'block'}}><input type="checkbox" checked={mfaMethods.includes('BIOMETRIC')} onChange={()=>toggleMfaMethod('BIOMETRIC')} /> Biometric</label>
+                </div>
+              )}
+
+              <div style={{marginTop:12}}>
+                <label style={{display:'block'}}>Risk-based Authentication<input type="checkbox" checked={riskAuth} onChange={(e)=>{ setRiskAuth(e.target.checked); localStorage.setItem('catalogue_login_builder_risk', JSON.stringify(e.target.checked)) }} /></label>
+              </div>
+            </div>
+          </div>
+
+          <div className="builder-preview form-card">
+            <h4>Login Flow Builder</h4>
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              {flowSteps.map((s, idx) => (
+                <div key={s} className="field-row" style={{alignItems:'center'}} draggable onDragStart={(e)=>{ e.dataTransfer.setData('text/index', String(idx)); e.dataTransfer.effectAllowed='move'; }} onDragOver={(e)=>{ e.preventDefault(); e.dataTransfer.dropEffect='move'; }} onDrop={(e)=>{ e.preventDefault(); const src = e.dataTransfer.getData('text/index'); if (src) { const from = Number(src); const to = idx; if (!Number.isNaN(from) && from !== to) { setFlowSteps(prev => { const copy = [...prev]; const [moved] = copy.splice(from, 1); copy.splice(to, 0, moved); localStorage.setItem('catalogue_login_builder_flow', JSON.stringify(copy)); return copy }) } } }}>
+                  <div style={{flex:1}}>{idx+1}. <strong>{s}</strong></div>
+                  <div style={{display:'flex',gap:8}}>
+                    <button className="ghost-button" onClick={()=>idx>0 && moveStep(idx, -1)}>Up</button>
+                    <button className="ghost-button" onClick={()=>idx<flowSteps.length-1 && moveStep(idx, +1)}>Down</button>
+                    <button className="ghost-button" onClick={()=>{ setFlowSteps(prev => { const copy=[...prev]; copy.splice(idx,1); localStorage.setItem('catalogue_login_builder_flow', JSON.stringify(copy)); return copy }) }}>Remove</button>
+                  </div>
+                </div>
+              ))}
+              <div style={{display:'flex',gap:8}}>
+                <input placeholder="New step" id="newFlowStepInput" />
+                <button className="ghost-button" onClick={()=>{ const el = document.getElementById('newFlowStepInput'); if (!el) return; const v = el.value.trim(); if (!v) return; setFlowSteps(prev=>{ const next=[...prev, v]; localStorage.setItem('catalogue_login_builder_flow', JSON.stringify(next)); return next }); el.value=''; }}>Add Step</button>
+              </div>
+            </div>
+          </div>
+
+          <div className="builder-config form-card">
+            <h4>Policy Configuration</h4>
+            <label>Policy Name<input value={policyName} onChange={(e)=>{ setPolicyName(e.target.value); localStorage.setItem('catalogue_login_builder_policy_name', e.target.value) }} /></label>
+
+            <div style={{marginTop:12}}>
+              <h5>Preview Policy JSON</h5>
+              <pre style={{background:'#071127',padding:12,borderRadius:8,maxHeight:300,overflow:'auto'}}>{generatedJSON}</pre>
+            </div>
+
+            <div style={{display:'flex',gap:8,marginTop:12}}>
+              <button className="primary-button" onClick={saveDraft}>Save Draft</button>
+              <button className="ghost-button" onClick={publishPolicy}>Publish</button>
+            </div>
+
+            <div style={{marginTop:12}}>
+              <h5>Existing Policies</h5>
+              <ul>
+                {loginPolicies.map((p) => <li key={p.id}><strong>{p.name}</strong> — {p.orgId || 'Global'} — {p.createdAt}</li>)}
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+    )
+  }
+
   return (
     <main className="app-shell">
       {view === 'home' && renderHome()}
@@ -749,12 +930,14 @@ function App() {
       {view === 'platform-schema' && renderPlatformSchema && renderPlatformSchema()}
       {view === 'organization' && renderOrganizationLogin()}
       {view === 'org-registration-builder' && <RegistrationBuilder />}
+      {view === 'org-login-builder' && <LoginBuilder />}
       {view === 'organization-dashboard' && renderOrgAdminDashboard()}
 
       {/* global modals */}
       {orgApprovalModal && renderApprovalModal()}
       {orgCredentialModal && renderCredentialModal()}
       {publishModal && renderPublishModal()}
+      {loginPublishModal && renderLoginPublishModal()}
     </main>
   )
 }
