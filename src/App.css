@@ -572,11 +572,23 @@ textarea {
   justify-content: space-between;
   align-items: center;
   gap: 16px;
-  padding: 20px 18px;
-  background: rgba(12, 18, 30, 0.9);
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 18px;
+  padding: 18px 18px;
+  background: linear-gradient(180deg, rgba(12,18,30,0.9), rgba(8,12,22,0.86));
+  border: 1px solid rgba(148, 163, 184, 0.06);
+  border-radius: 14px;
+  box-shadow: 0 8px 20px rgba(2,6,23,0.35);
 }
+.app-status-badge {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+.app-status-badge.status-pending { background: rgba(250,204,21,0.12); color: #facc15; border: 1px solid rgba(250,204,21,0.18); }
+.app-status-badge.status-approved { background: rgba(52,211,153,0.08); color: #34d399; border: 1px solid rgba(52,211,153,0.16); }
+.app-status-badge.status-rejected { background: rgba(239,68,68,0.08); color: #ef4444; border: 1px solid rgba(239,68,68,0.14); }
 
 .approval-name {
   font-size: 1.14rem;
@@ -800,36 +812,126 @@ textarea {
   display:inline-flex;
   align-items:center;
   justify-content:center;
-  width:28px;
-  height:28px;
-  border-radius:6px;
- background: rgba(255,255,255,0.03);
-  margin-right:8px;
+  width:36px;
+  height:36px;
+  border-radius:8px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  margin-right:12px;
   cursor:grab;
- border: 1px solid rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.04);
+  box-shadow: 0 2px 6px rgba(2,6,23,0.35);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
- 
+.drag-handle:active { cursor:grabbing; transform: translateY(1px); }
+.drag-handle::before { content: '≡'; font-weight:700; color: rgba(255,255,255,0.85); font-size:14px; }
+
 .builder-preview .field-row {
   display:flex;
   align-items:center;
   gap:12px;
-  padding:12px 14px;
+  padding:14px 16px;
   border:1px solid rgba(148,163,184,0.06);
-  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));
   border-radius:12px;
-  box-shadow: 0 6px 18px rgba(2,6,23,0.4);
+  box-shadow: 0 8px 22px rgba(2,6,23,0.35);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+
+.builder-preview .field-row:hover { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(2,6,23,0.45); }
+
+.field-type-chip {
+  display:inline-block;
+  font-size:0.72rem;
+  padding:6px 8px;
+  border-radius:999px;
+  background: rgba(255,255,255,0.03);
+  color: #dff4ff;
+  border: 1px solid rgba(255,255,255,0.03);
+  margin-left:8px;
+}
+
+.builder-preview .field-row .drag-handle { flex: 0 0 auto; }
+.builder-preview .field-row .control-wrap { flex:1; display:flex; flex-direction:column; gap:6px }
+.builder-preview .field-row input,
+.builder-preview .field-row select {
+  padding:10px 12px;
+  border-radius:8px;
+  border:1px solid rgba(148,163,184,0.12);
+  background: rgba(10,16,24,0.6);
+  color: #eaf6ff;
+}
+
+.builder-preview .field-row.drop-target {
+  border-color: rgba(59,130,246,0.6);
+  background: linear-gradient(180deg, rgba(59,130,246,0.02), rgba(255,255,255,0.01));
 }
 
 .builder-preview .field-row:active,
 .builder-preview .field-row.dragging {
-  opacity: 0.85;
-  transform: scale(0.995);
+  opacity: 0.95;
+  transform: scale(0.998);
 }
 
 .builder-preview .field-row.drop-target {
   border-color: rgba(96,165,250,0.7);
   background: linear-gradient(180deg, rgba(96,165,250,0.04), rgba(255,255,255,0.01));
 }
+
+/* Organization applications styling */
+.org-app-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 14px;
+}
+
+.org-app-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px;
+  background: linear-gradient(180deg, rgba(10,16,28,0.9), rgba(8,12,20,0.86));
+  border-radius: 12px;
+  border: 1px solid rgba(148,163,184,0.06);
+  align-items: flex-start;
+}
+
+.org-app-left {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  flex: 1;
+}
+
+.app-icon {
+  width:48px;
+  height:48px;
+  border-radius:10px;
+  background: linear-gradient(180deg,#0ea5e9,#0369a1);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:800;
+  color:white;
+  font-size:1.05rem;
+}
+
+.app-info .approval-name {
+  font-size:1.05rem;
+  margin-bottom:6px;
+}
+
+.app-desc { margin-top:8px; color: rgba(226,232,240,0.8); }
+
+.app-meta-row { display:flex; gap:10px; align-items:center; margin-top:10px; }
+
+.org-app-actions { display:flex; flex-direction:column; gap:8px; min-width:160px; align-items:flex-end }
+
+.register-modal { width: min(780px, 96%); }
+.register-form-grid { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+.register-form-grid label.full { grid-column: 1 / -1; }
+.register-form-grid input, .register-form-grid textarea, .register-form-grid select { width:100%; }
+
+.subtle { color: rgba(210,223,240,0.7); font-size:0.95rem; margin-top:6px; }
 
 /* Make builder panels visually closer to Figma layout */
 .builder-palette .form-card,

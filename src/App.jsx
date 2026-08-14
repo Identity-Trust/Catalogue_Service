@@ -57,9 +57,11 @@ function App() {
   const [schemaSearch, setSchemaSearch] = useState('')
   const [schemaFilterStatus, setSchemaFilterStatus] = useState('All')
   const [policyPreviewModal, setPolicyPreviewModal] = useState(null)
-  const [auditLogs, setAuditLogs] = useState(() => {
-    try { const raw = localStorage.getItem('catalogue_audit_v1'); return raw ? JSON.parse(raw) : [] } catch(e) { return [] }
-  })
+  const [registerAppModal, setRegisterAppModal] = useState(false)
+  const [registerAppForm, setRegisterAppForm] = useState({ name:'', type:'web', description:'', contactEmail:'', domain:'', redirectUri:'', logoutUri:'' })
+  const [appSearch, setAppSearch] = useState('')
+  const [appFilterStatus, setAppFilterStatus] = useState('All')
+  const [auditLogs, setAuditLogs] = useState(() => { try { const raw = localStorage.getItem('catalogue_audit_v1'); return raw ? JSON.parse(raw) : [] } catch(e) { return [] } })
 
   const [loginPolicies, setLoginPolicies] = useState(() => {
     try { const raw = localStorage.getItem('catalogue_login_policies_v1'); return raw ? JSON.parse(raw) : [] } catch(e) { return [] }
@@ -183,7 +185,13 @@ function App() {
   }
 
   const approveApplication = (app) => {
-    setApplications((prev) => prev.map((item) => (item.id === app.id ? { ...item, status: 'approved' } : item)))
+    // generate client credentials
+    const clientId = `client_${Math.random().toString(36).slice(2,10)}`
+    const clientSecret = (() => { try { const arr = new Uint8Array(24); window.crypto.getRandomValues(arr); return Array.from(arr).map(b=>('0'+b.toString(16)).slice(-2)).join('') } catch(e) { return Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2) } })()
+    const updated = { ...app, status: 'approved', clientId, clientSecret, approvedAt: new Date().toLocaleString() }
+    setApplications((prev) => prev.map((item) => (item.id === app.id ? updated : item)))
+    // show credentials modal to platform admin (so they can copy and share)
+    setAppCredentialModal({ app: updated, clientId, clientSecret })
     setOrgApprovalModal(null)
   }
 
@@ -234,10 +242,18 @@ function App() {
   const [requestModal, setRequestModal] = useState(null)
   // Org credential modal shown after approval (mocked credentials)
   const [orgCredentialModal, setOrgCredentialModal] = useState(null)
+  // App credential modal shown after app approval (client id / secret)
+  const [appCredentialModal, setAppCredentialModal] = useState(null)
+  // flags to allow one-time reveal of credentials in UI
+  const [revealedOrgCred, setRevealedOrgCred] = useState(null)
+  const [revealedAppCred, setRevealedAppCred] = useState(null)
   // publish modal for registration builder
   const [publishModal, setPublishModal] = useState(null)
   // publish modal for login policies
   const [loginPublishModal, setLoginPublishModal] = useState(null)
+  // generic confirm modal state: { title, message, onConfirm }
+  const [confirmModal, setConfirmModal] = useState(null)
+  const [confirmProcessing, setConfirmProcessing] = useState(false)
 
   useEffect(() => {
     // save key parts of app state to localStorage on change
@@ -646,8 +662,8 @@ function App() {
               <div className="review-block"><label>Status</label><p>{item.status}</p></div>
               <div className="modal-actions">
                 {item.type === 'login' && <button type="button" className="ghost-button" onClick={() => { setPolicyPreviewModal(item); }}>Preview policy JSON</button>}
-                {item.status !== 'approved' && <button type="button" className="primary-button" onClick={() => approveSchema(item)}>Approve</button>}
-                {item.status === 'pending' && <button type="button" className="secondary-button" onClick={() => rejectSchema(item)}>Reject</button>}
+                {item.status !== 'approved' && <button type="button" className="primary-button" onClick={() => setConfirmModal({ title: 'Approve Schema', message: `Approve schema "${item.name}"? This will activate the schema for ${item.orgName || 'Global'}.`, onConfirm: async () => { approveSchema(item); addAudit('Approve Schema', `Schema ${item.name} approved`); } })}>Approve</button>}
+                {item.status === 'pending' && <button type="button" className="secondary-button" onClick={() => setConfirmModal({ title: 'Reject Schema', message: `Reject schema "${item.name}"? This will mark it as rejected.`, onConfirm: async () => { rejectSchema(item); addAudit('Reject Schema', `Schema ${item.name} rejected`); } })}>Reject</button>}
               </div>
             </>
           ) : orgApprovalModal.type === 'app' ? (
@@ -657,7 +673,7 @@ function App() {
               <div className="review-block"><label>Type</label><p>{item.type}</p></div>
               <div className="review-block"><label>Status</label><p>{item.status}</p></div>
               <div className="modal-actions">
-                {item.status !== 'approved' && <button type="button" className="primary-button" onClick={() => approveApplication(item)}>Approve</button>}
+                {item.status !== 'approved' && <button type="button" className="primary-button" onClick={() => setConfirmModal({ title: 'Approve Application', message: `Approve application "${item.name}" from ${item.orgName || 'Unknown'}? This will generate client credentials.`, onConfirm: async () => { approveApplication(item); addAudit('Approve Application', `Approved ${item.name}`); } })}>Approve</button>}
               </div>
             </>
           ) : (
@@ -671,10 +687,10 @@ function App() {
               <div className="review-block"><label>Submitted</label><p>{item.submittedAt || '—'}</p></div>
               <div className="review-block"><label>Verification Status</label><p>{item.status}</p></div>
               <div className="modal-actions">
-                {item.status !== 'approved' && item.status !== 'suspended' && <button type="button" className="primary-button" onClick={() => approveOrganization(item)}>Approve</button>}
-                {item.status === 'approved' && <button type="button" className="secondary-button" onClick={() => suspendOrganization(item)}>Suspend</button>}
-                {item.status === 'suspended' && <button type="button" className="primary-button" onClick={() => unsuspendOrganization(item)}>Unsuspend</button>}
-                {item.status === 'pending' && <button type="button" className="secondary-button" onClick={() => rejectOrganization(item)}>Reject</button>}
+                {item.status !== 'approved' && item.status !== 'suspended' && <button type="button" className="primary-button" onClick={() => setConfirmModal({ title: 'Approve Organization', message: `Approve organization "${item.name}"? This will activate the organization and create an org admin account.`, onConfirm: async () => { approveOrganization(item); addAudit('Approve Organization', `Approved ${item.name}`); } })}>Approve</button>}
+                {item.status === 'approved' && <button type="button" className="secondary-button" onClick={() => setConfirmModal({ title: 'Suspend Organization', message: `Suspend organization "${item.name}"? This will deactivate access for the organization.`, onConfirm: async () => { suspendOrganization(item); addAudit('Suspend Organization', `Suspended ${item.name}`); } })}>Suspend</button>}
+                {item.status === 'suspended' && <button type="button" className="primary-button" onClick={() => setConfirmModal({ title: 'Unsuspend Organization', message: `Unsuspend organization "${item.name}"? This will restore organization access.`, onConfirm: async () => { unsuspendOrganization(item); addAudit('Unsuspend Organization', `Unsuspended ${item.name}`); } })}>Unsuspend</button>}
+                {item.status === 'pending' && <button type="button" className="secondary-button" onClick={() => setConfirmModal({ title: 'Reject Organization', message: `Reject organization "${item.name}"? This will mark the registration as rejected.`, onConfirm: async () => { rejectOrganization(item); addAudit('Reject Organization', `Rejected ${item.name}`); } })}>Reject</button>}
                 {item.status === 'pending' && <button type="button" className="ghost-button" onClick={() => setRequestModal({ target: item, open: true })}>Request More Information</button>}
               </div>
             </>
@@ -722,6 +738,30 @@ function App() {
     )
   }
 
+  const renderConfirmModal = () => {
+    if (!confirmModal) return null
+    const { title, message, onConfirm } = confirmModal
+    return (
+      <div className="modal-backdrop" onClick={() => { if (!confirmProcessing) setConfirmModal(null) }}>
+        <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-header"><h3>{title || 'Confirm'}</h3><button className="close-button" onClick={() => { if (!confirmProcessing) setConfirmModal(null) }}>×</button></div>
+          <div className="form-card">
+            <p style={{marginBottom:12}}>{message}</p>
+            <div style={{display:'flex',justifyContent:'flex-end',gap:8}}>
+              <button className="secondary-button" disabled={confirmProcessing} onClick={() => setConfirmModal(null)}>Cancel</button>
+              <button className="primary-button" disabled={confirmProcessing} onClick={async () => { try { setConfirmProcessing(true); // allow the provided action to run
+                    await (onConfirm ? onConfirm() : Promise.resolve());
+                  } catch (e) {
+                    console.error('Confirm action failed', e)
+                    alert('Action failed: ' + String(e))
+                  } finally { setConfirmProcessing(false); setConfirmModal(null); } }}> {confirmProcessing ? 'Processing...' : 'Confirm'}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   function RegistrationBuilder() {
     const [fields, setFields] = useState(() => {
       try { const saved = JSON.parse(localStorage.getItem('registration_builder')) ; return saved || [{ name: 'fullName', label: 'Full Name', type: 'text', required: true }]
@@ -754,14 +794,17 @@ function App() {
                   const control = f.type === 'dropdown' ? (<select>{(f.options||['Option 1']).map((o,oi)=>(<option key={oi}>{o}</option>))}</select>) : f.type === 'checkbox' ? (<input type="checkbox" />) : (<input placeholder={f.label} />)
                   return (
                     <div key={f.name} className="field-row" onDragOver={(e)=>e.preventDefault()} onDrop={(e)=>{ e.preventDefault(); const src = e.dataTransfer.getData('text/index'); if (src) { const s = Number(src); if (!Number.isNaN(s) && s !== idx) { const copy = [...fields]; const [moved] = copy.splice(s,1); copy.splice(idx,0,moved); setFields(copy); localStorage.setItem('registration_builder', JSON.stringify(copy)); setSelectedIndex(idx); } } }}>
-                      <span className="drag-handle" draggable onDragStart={(e)=>{ e.dataTransfer.setData('text/index', String(idx)); }} title="Drag to reorder">⋮</span>
-                      <div style={{flex:1}}>
-                        <label style={{ display: 'block', fontSize: 12, opacity: 0.8 }}>{f.label}{f.required ? ' *' : ''}</label>
-                        {control}
-                      </div>
-                    </div>
-                  )
-                })}
+                                    <span className="drag-handle" draggable onDragStart={(e)=>{ e.dataTransfer.setData('text/index', String(idx)); }} title="Drag to reorder" />
+                                    <div className="control-wrap" style={{flex:1}}>
+                                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                                        <label style={{ display: 'block', fontSize: 12, opacity: 0.9, fontWeight:600 }}>{f.label}{f.required ? ' *' : ''}</label>
+                                        <span className="field-type-chip">{(f.type||'text').toUpperCase()}</span>
+                                      </div>
+                                      {control}
+                                    </div>
+                                  </div>
+                                )
+                              })}
             </form>
             <div style={{marginTop:12}}><h5>Generated JSON</h5><pre style={{whiteSpace:'pre-wrap',maxHeight:200,overflow:'auto',background:'#071127',padding:12,borderRadius:8}}>{JSON.stringify({ registrationFields: fields }, null, 2)}</pre></div>
           </div>
@@ -811,7 +854,7 @@ function App() {
   
   const renderOrgAdminDashboard = () => (
     <div className="org-dashboard-shell">
-      <aside className="org-sidebar"><div className="sidebar-header">Identity OS</div><nav>{orgAdminMenu.map((item) => <button type="button" key={item} className={`menu-item ${item === 'Dashboard' ? 'active' : ''}`} onClick={() => { if (item === 'Registration Builder') { setView('org-registration-builder') } else if (item === 'Login Configuration') { setView('org-login-builder') } }}>{item}</button>)}</nav></aside>
+      <aside className="org-sidebar"><div className="sidebar-header">Identity OS</div><nav>{orgAdminMenu.map((item) => <button type="button" key={item} className={`menu-item ${item === 'Dashboard' ? 'active' : ''}`} onClick={() => { if (item === 'Registration Builder') { setView('org-registration-builder') } else if (item === 'Login Configuration') { setView('org-login-builder') } else if (item === 'Applications') { setView('org-applications') } }}>{item}</button>)}</nav></aside>
       <main className="org-main">
         <header className="org-main-header"><div><div className="eyebrow">Organization Admin</div><h2>{currentOrg?.name || 'TechNova Solutions'} Overview</h2></div><div style={{display:'flex',gap:12}}><button type="button" className="secondary-button" onClick={() => setView('home')}>Sign Out</button><button type="button" className="primary-button" onClick={() => setView('org-registration-builder')}>Open Registration Builder</button></div></header>        <section className="kpi-grid">
           <div className="kpi-card"><strong>{100 + (applications.length || 0)}</strong><span>Total Users</span></div>
@@ -826,6 +869,79 @@ function App() {
     </div>
   )
 
+  const renderOrgApplications = () => {
+    const orgId = currentOrg?.id || orgLoginId
+    const orgApps = applications.filter(a => a.orgId === orgId)
+    return (
+      <div className="org-dashboard-shell">
+        <aside className="org-sidebar"><div className="sidebar-header">Identity OS</div><nav>{orgAdminMenu.map((item) => <button type="button" key={item} className={`menu-item ${item === 'Applications' ? 'active' : ''}`} onClick={() => { if (item === 'Registration Builder') { setView('org-registration-builder') } else if (item === 'Login Configuration') { setView('org-login-builder') } else if (item === 'Applications') { setView('org-applications') } }}>{item}</button>)}</nav></aside>
+        <main className="org-main">
+          <header className="org-main-header"><div><div className="eyebrow">Organization Admin</div><h2>Applications — {currentOrg?.name || orgId}</h2><div className="subtle">Manage applications registered by your organization. Submit new apps for platform approval.</div></div><div style={{display:'flex',gap:12}}><button type="button" className="secondary-button" onClick={() => setView('organization-dashboard')}>Back</button><button type="button" className="primary-button" onClick={() => setRegisterAppModal(true)}>Register Application</button></div></header>
+          <div className="panel-copy"><p>Manage your applications and submit new applications to the platform for approval.</p></div>
+          <section style={{padding:12}}>
+            {orgApps.length === 0 ? <div className="form-card"><p>No applications yet. Click Register Application to add one.</p></div> : (
+              <div className="org-app-grid">
+                {orgApps.map(app => (
+                  <div key={app.id} className="org-app-card">
+                    <div className="org-app-left">
+                      <div className="app-icon">{(app.type||'app').charAt(0).toUpperCase()}</div>
+                      <div className="app-info">
+                        <div className="approval-name">{app.name}</div>
+                        <div className="approval-meta">{app.type} • {app.id}</div>
+                        <div className="app-desc"><small>{app.description}</small></div>
+                        <div className="app-meta-row"><span className={`app-status-badge status-${app.status}`}>{app.status}</span><span className="created-at">{app.createdAt}</span></div>
+                      </div>
+                    </div>
+                    <div className="org-app-actions">
+                      <button className="ghost-button" onClick={() => setOrgApprovalModal({ type: 'app', item: app })}>View</button>
+                      {app.status === 'pending' && <button className="secondary-button" onClick={() => { setApplications(prev => prev.filter(a => a.id !== app.id)); addAudit('Withdraw Application', `Withdrew ${app.name}`); }}>Withdraw</button>}
+                      {app.status === 'approved' && <>
+                        <button className="secondary-button" onClick={() => { navigator.clipboard?.writeText(app.clientId || '') ; alert('Client ID copied to clipboard') }}>Copy Client ID</button>
+                        <button className="secondary-button" onClick={() => { setAppCredentialModal({ app, clientId: app.clientId, clientSecret: app.clientSecret }); }}>View Credentials</button>
+                      </>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </main>
+
+        {registerAppModal && (
+          <div className="modal-backdrop" onClick={() => setRegisterAppModal(false)}>
+            <div className="modal-card register-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header"><h3>Register Application</h3><button className="close-button" onClick={() => setRegisterAppModal(false)}>×</button></div>
+              <div className="form-card">
+                <div className="register-form-grid">
+                  <label className="full">Application Name<input value={registerAppForm.name} onChange={(e) => setRegisterAppForm(prev => ({ ...prev, name: e.target.value }))} /></label>
+                  <label>Type<select value={registerAppForm.type} onChange={(e) => setRegisterAppForm(prev => ({ ...prev, type: e.target.value }))}><option value="web">Web</option><option value="mobile">Mobile</option><option value="spa">Single Page App</option><option value="backend">Backend</option></select></label>
+                  <label>Contact Email<input value={registerAppForm.contactEmail} onChange={(e) => setRegisterAppForm(prev => ({ ...prev, contactEmail: e.target.value }))} /></label>
+                  <label>Domain<input value={registerAppForm.domain} onChange={(e) => setRegisterAppForm(prev => ({ ...prev, domain: e.target.value }))} /></label>
+                  <label className="full">Description<textarea value={registerAppForm.description} onChange={(e) => setRegisterAppForm(prev => ({ ...prev, description: e.target.value }))} /></label>
+                  <label>Redirect URI<input value={registerAppForm.redirectUri} onChange={(e) => setRegisterAppForm(prev => ({ ...prev, redirectUri: e.target.value }))} /></label>
+                  <label>Logout URI<input value={registerAppForm.logoutUri} onChange={(e) => setRegisterAppForm(prev => ({ ...prev, logoutUri: e.target.value }))} /></label>
+                </div>
+                <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:12}}>
+                  <button className="secondary-button" onClick={() => setRegisterAppModal(false)}>Cancel</button>
+                  <button className="primary-button" onClick={() => {
+                    // validation
+                    if (!registerAppForm.name) { alert('Name is required'); return }
+                    const newApp = { id: `app-${Date.now()}`, orgId: orgId || null, orgName: currentOrg?.name || 'Unknown', name: registerAppForm.name, type: registerAppForm.type || 'web', description: registerAppForm.description || '', contactEmail: registerAppForm.contactEmail || '', domain: registerAppForm.domain || '', redirectUri: registerAppForm.redirectUri || '', logoutUri: registerAppForm.logoutUri || '', status: 'pending', createdAt: new Date().toLocaleString() }
+                    setApplications(prev => [newApp, ...prev])
+                    addAudit('Submit Application', `Submitted application ${newApp.name} for approval`)
+                    setRegisterAppForm({ name:'', type:'web', description:'', contactEmail:'', domain:'', redirectUri:'', logoutUri:'' })
+                    setRegisterAppModal(false)
+                    alert('Application submitted for platform approval')
+                  }}>Submit</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   const renderPublishModal = () => {
     if (!publishModal) return null
     return (
@@ -835,13 +951,19 @@ function App() {
           <div className="form-card">
             <div className="review-block"><label>Name</label><p>{publishModal.name}</p></div>
             <div className="review-block"><label>Fields</label><p>{publishModal.fields.map(f=>f.label).join(', ')}</p></div>
+            <div className="review-block"><label>Target Organization</label>
+              <select defaultValue={publishModal.orgId || 'GLOBAL'} onChange={(e)=>{ const val = e.target.value; setPublishModal(prev => ({ ...prev, orgId: val === 'GLOBAL' ? null : val })); }}>
+                <option value="GLOBAL">Global (no org)</option>
+                {organizations.map(o => <option key={o.id} value={o.id}>{o.name} — {o.id}</option>)}
+              </select>
+            </div>
             <div style={{display:'flex',justifyContent:'flex-end',gap:8}}>
               <button className="secondary-button" onClick={()=>setPublishModal(null)}>Cancel</button>
               <button className="primary-button" onClick={()=>{
-                const newSchema = { id: `schema_${Date.now()}`, type: 'registration', name: publishModal.name, orgId: (currentOrg && currentOrg.id) || null, orgName: (currentOrg && currentOrg.name) || 'Unassigned', fields: publishModal.fields, status: 'pending', createdAt: new Date().toLocaleString() }
+                const newSchema = { id: `schema_${Date.now()}`, type: 'registration', name: publishModal.name, orgId: publishModal.orgId || (currentOrg && currentOrg.id) || null, orgName: (publishModal.orgId && organizations.find(o=>o.id===publishModal.orgId)?.name) || (currentOrg && currentOrg.name) || 'Unassigned', fields: publishModal.fields, status: 'pending', createdAt: new Date().toLocaleString() }
                 setSchemas(prev=>[newSchema,...prev])
                 addAudit('Submit Registration Schema', `Submitted registration schema ${newSchema.name} for approval`)
-                if (currentOrg && currentOrg.id) { setOrganizations(prev => prev.map(o => o.id === currentOrg.id ? ({ ...o, registrationSchemas: [...(o.registrationSchemas||[]), newSchema] }) : o)); }
+                if (newSchema.orgId) { setOrganizations(prev => prev.map(o => o.id === newSchema.orgId ? ({ ...o, registrationSchemas: [...(o.registrationSchemas||[]), newSchema] }) : o)); }
                 setPublishModal(null)
                 alert('Schema submitted for approval')
               }}>Confirm Publish</button>
@@ -988,15 +1110,21 @@ function App() {
             <h4>Login Flow Builder</h4>
             <div style={{display:'flex',flexDirection:'column',gap:8}}>
               {flowSteps.map((s, idx) => (
-                <div key={s} className="field-row" style={{alignItems:'center'}} draggable onDragStart={(e)=>{ e.dataTransfer.setData('text/index', String(idx)); e.dataTransfer.effectAllowed='move'; }} onDragOver={(e)=>{ e.preventDefault(); e.dataTransfer.dropEffect='move'; }} onDrop={(e)=>{ e.preventDefault(); const src = e.dataTransfer.getData('text/index'); if (src) { const from = Number(src); const to = idx; if (!Number.isNaN(from) && from !== to) { setFlowSteps(prev => { const copy = [...prev]; const [moved] = copy.splice(from, 1); copy.splice(to, 0, moved); localStorage.setItem('catalogue_login_builder_flow', JSON.stringify(copy)); return copy }) } } }}>
-                  <div style={{flex:1}}>{idx+1}. <strong>{s}</strong></div>
-                  <div style={{display:'flex',gap:8}}>
-                    <button className="ghost-button" onClick={()=>idx>0 && moveStep(idx, -1)}>Up</button>
-                    <button className="ghost-button" onClick={()=>idx<flowSteps.length-1 && moveStep(idx, +1)}>Down</button>
-                    <button className="ghost-button" onClick={()=>{ setFlowSteps(prev => { const copy=[...prev]; copy.splice(idx,1); localStorage.setItem('catalogue_login_builder_flow', JSON.stringify(copy)); return copy }) }}>Remove</button>
-                  </div>
-                </div>
-              ))}
+                              <div key={s} className="field-row" style={{alignItems:'center'}} onDragOver={(e)=>{ e.preventDefault(); e.dataTransfer.dropEffect='move'; }} onDrop={(e)=>{ e.preventDefault(); const src = e.dataTransfer.getData('text/index'); if (src) { const from = Number(src); const to = idx; if (!Number.isNaN(from) && from !== to) { setFlowSteps(prev => { const copy = [...prev]; const [moved] = copy.splice(from, 1); copy.splice(to, 0, moved); localStorage.setItem('catalogue_login_builder_flow', JSON.stringify(copy)); return copy }) } } }}>
+                                <span className="drag-handle" draggable onDragStart={(e)=>{ e.dataTransfer.setData('text/index', String(idx)); e.dataTransfer.effectAllowed='move'; }} title="Drag to reorder" />
+                                <div className="control-wrap" style={{flex:1}}>
+                                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                                    <div>{idx+1}. <strong>{s}</strong></div>
+                                    <span className="field-type-chip">STEP</span>
+                                  </div>
+                                </div>
+                                <div style={{display:'flex',gap:8}}>
+                                  <button className="ghost-button" onClick={()=>idx>0 && moveStep(idx, -1)}>Up</button>
+                                  <button className="ghost-button" onClick={()=>idx<flowSteps.length-1 && moveStep(idx, +1)}>Down</button>
+                                  <button className="ghost-button" onClick={()=>{ setFlowSteps(prev => { const copy=[...prev]; copy.splice(idx,1); localStorage.setItem('catalogue_login_builder_flow', JSON.stringify(copy)); return copy }) }}>Remove</button>
+                                </div>
+                              </div>
+                            ))}
               <div style={{display:'flex',gap:8}}>
                 <input placeholder="New step" id="newFlowStepInput" />
                 <button className="ghost-button" onClick={()=>{ const el = document.getElementById('newFlowStepInput'); if (!el) return; const v = el.value.trim(); if (!v) return; setFlowSteps(prev=>{ const next=[...prev, v]; localStorage.setItem('catalogue_login_builder_flow', JSON.stringify(next)); return next }); el.value=''; }}>Add Step</button>
@@ -1030,6 +1158,89 @@ function App() {
     )
   }
 
+  const renderAppCredentialModal = () => {
+    if (!appCredentialModal) return null
+    const { app, clientId, clientSecret } = appCredentialModal
+    return (
+      <div className="modal-backdrop" onClick={() => setAppCredentialModal(null)}>
+        <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-header"><h3>Application Credentials</h3><button className="close-button" onClick={() => setAppCredentialModal(null)}>×</button></div>
+          <div className="form-card">
+            <div style={{marginBottom:12}}>
+              <div><strong>{app?.name}</strong></div>
+              <div style={{opacity:0.8,fontSize:12}}>{app?.orgName} • {app?.id}</div>
+            </div>
+            <div className="review-block"><label>Client ID</label><p style={{wordBreak:'break-all'}}>{clientId}</p></div>
+            <div className="review-block"><label>Client Secret</label><p style={{wordBreak:'break-all',fontFamily:'monospace'}}>{clientSecret}</p></div>
+            <div style={{display:'flex',justifyContent:'flex-end',gap:8}}>
+              <button className="secondary-button" onClick={() => { try { navigator.clipboard.writeText(`clientId: ${clientId}\nclientSecret: ${clientSecret}`); alert('Credentials copied to clipboard') } catch (e) { alert('Unable to copy to clipboard in this environment') } }}>Copy</button>
+              <button className="primary-button" onClick={() => setAppCredentialModal(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const renderPlatformApps = () => (
+    <div className="dashboard-shell">
+      {renderPlatformSidebar()}
+      <main className="dashboard-main">
+        {renderHeader('Identity OS — Applications')}
+        <header className="dashboard-header"><div><div className="eyebrow">Platform Admin</div><h2>Applications</h2></div><button type="button" className="primary-button" onClick={() => setView('home')}>Sign Out</button></header>
+        <div className="panel-copy"><p>Approve and manage applications registered by organizations.</p></div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,marginBottom:12}}>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            <input placeholder="Search applications" value={appSearch} onChange={(e)=>setAppSearch(e.target.value)} style={{minWidth:300}} />
+            <select value={appFilterStatus} onChange={(e)=>setAppFilterStatus(e.target.value)}>
+              <option>All</option>
+              <option>Pending</option>
+              <option>Approved</option>
+              <option>Rejected</option>
+            </select>
+          </div>
+          <div>
+            <button className="primary-button" onClick={() => setView('platform-pending')}>View Pending Center</button>
+          </div>
+        </div>
+        <div className="approval-list">
+          {applications.filter(a => {
+            if (appFilterStatus !== 'All' && a.status !== appFilterStatus.toLowerCase()) return false
+            if (appSearch && appSearch.trim()) {
+              const q = appSearch.toLowerCase()
+              if (!((a.name||'').toLowerCase().includes(q) || (a.orgName||'').toLowerCase().includes(q) || (a.id||'').toLowerCase().includes(q))) return false
+            }
+            return true
+          }).map((app) => (
+            <div key={app.id} className="approval-card">
+              <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                <div style={{display:'flex',alignItems:'center',gap:12}}>
+                  <div style={{display:'flex',flexDirection:'column'}}>
+                    <div className="approval-name">{app.name}</div>
+                    <div className="approval-meta">{app.orgName} • {app.type} • {app.id}</div>
+                  </div>
+                  <div style={{marginLeft:12}}>
+                    <span className={`app-status-badge status-${app.status}`}>{app.status}</span>
+                  </div>
+                </div>
+                <div style={{marginTop:6}}><small style={{opacity:0.86}}>{app.description}</small></div>
+              </div>
+              <div className="approval-actions">
+                <button className="ghost-button" onClick={() => setOrgApprovalModal({ type: 'app', item: app })}>View</button>
+                {app.status === 'pending' && <button className="primary-button" onClick={() => { approveApplication(app); addAudit('Approve Application', `Approved ${app.name}`); }}>Approve</button>}
+                {app.status === 'pending' && <button className="secondary-button" onClick={() => { setApplications(prev => prev.map(i => i.id === app.id ? { ...i, status: 'rejected', rejectedAt: new Date().toLocaleString() } : i)); addAudit('Reject Application', `Rejected ${app.name}`); }}>Reject</button>}
+                {app.status === 'approved' && <>
+                  <button className="secondary-button" onClick={() => { navigator.clipboard?.writeText(app.clientId || '') ; alert('Client ID copied to clipboard') }}>Copy Client ID</button>
+                  <button className="secondary-button" onClick={() => { setAppCredentialModal({ app, clientId: app.clientId, clientSecret: app.clientSecret }); }}>View Credentials</button>
+                </>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </main>
+    </div>
+  )
+
   return (
     <main className="app-shell">
       {view === 'home' && renderHome()}
@@ -1039,6 +1250,7 @@ function App() {
       {view === 'platform-dashboard' && renderPlatformDashboard()}
       {view === 'platform-organizations' && renderPlatformOrganizations()}
       {view === 'platform-approved' && renderPlatformOrganizations()}
+      {view === 'platform-apps' && renderPlatformApps && renderPlatformApps()}
       {view === 'platform-audit' && renderPlatformAudit()}
       {view === 'platform-identity-mgmt' && renderPlatformIdentityMgmt()}
       {view === 'platform-settings' && renderPlatformOrganizations()}
@@ -1047,11 +1259,13 @@ function App() {
       {view === 'organization' && renderOrganizationLogin()}
       {view === 'org-registration-builder' && <RegistrationBuilder />}
       {view === 'org-login-builder' && <LoginBuilder />}
+      {view === 'org-applications' && renderOrgApplications && renderOrgApplications()}
       {view === 'organization-dashboard' && renderOrgAdminDashboard()}
 
       {/* global modals */}
-      {orgApprovalModal && renderApprovalModal()}
+          {orgApprovalModal && renderApprovalModal()}
       {orgCredentialModal && renderCredentialModal()}
+      {appCredentialModal && renderAppCredentialModal && renderAppCredentialModal()}
       {publishModal && renderPublishModal()}
       {loginPublishModal && renderLoginPublishModal()}
       {policyPreviewModal && renderPolicyPreviewModal()}
