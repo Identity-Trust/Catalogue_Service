@@ -34,8 +34,8 @@ const initialApplications = [
 ]
 
 const initialSchemas = [
-  { id: 'schema_001', name: 'Employee Schema', orgId: 'org_7k3m9p2x', orgName: 'TechNova Solutions', fields: ['firstName','lastName','email','employeeId'], status: 'pending', createdAt: '2026-07-20, 10:32 am' },
-  { id: 'schema_002', name: 'Customer Profile', orgId: 'org_fs8b2c4e', orgName: 'Apex Digital', fields: ['name','email','phone','address'], status: 'pending', createdAt: '2026-08-05, 03:40 pm' },
+  { id: 'schema_001', type: 'registration', name: 'Employee Schema', orgId: 'org_7k3m9p2x', orgName: 'TechNova Solutions', fields: ['firstName','lastName','email','employeeId'], status: 'pending', createdAt: '2026-07-20, 10:32 am' },
+  { id: 'schema_002', type: 'registration', name: 'Customer Profile', orgId: 'org_fs8b2c4e', orgName: 'Apex Digital', fields: ['name','email','phone','address'], status: 'pending', createdAt: '2026-08-05, 03:40 pm' },
 ]
 
 const approvedOrgIds = ['org_7k3m9p2x', 'org_b8c5d1k9', 'org_f9e2h4q7']
@@ -53,6 +53,10 @@ function App() {
   const [approvedOrganizations, setApprovedOrganizations] = useState([{ id: 'org_7k3m9p2x', name: 'TechNova Solutions', status: 'approved', email: 'admin@technova.io', country: 'India' }])
   const [applications, setApplications] = useState(initialApplications)
   const [schemas, setSchemas] = useState(initialSchemas)
+  const [schemaTab, setSchemaTab] = useState('registration')
+  const [schemaSearch, setSchemaSearch] = useState('')
+  const [schemaFilterStatus, setSchemaFilterStatus] = useState('All')
+  const [policyPreviewModal, setPolicyPreviewModal] = useState(null)
   const [auditLogs, setAuditLogs] = useState(() => {
     try { const raw = localStorage.getItem('catalogue_audit_v1'); return raw ? JSON.parse(raw) : [] } catch(e) { return [] }
   })
@@ -184,12 +188,45 @@ function App() {
   }
 
   const approveSchema = (schema) => {
-    setSchemas((prev) => prev.map((s) => (s.id === schema.id ? { ...s, status: 'approved', approvedAt: new Date().toLocaleString() } : s)))
+    if (schema.type === 'login') {
+      // Convert schema.payload into a login policy and persist
+      const policy = {
+        id: `policy_${Date.now()}`,
+        name: schema.name,
+        authenticationMethods: schema.payload?.authenticationMethods || [],
+        mfa: schema.payload?.mfa || false,
+        mfaMethods: schema.payload?.mfaMethods || [],
+        riskAuthentication: schema.payload?.riskAuthentication || false,
+        flow: schema.payload?.flow || [],
+        orgId: schema.orgId || null,
+        createdAt: new Date().toLocaleString(),
+      }
+      try {
+        const raw = localStorage.getItem('catalogue_login_policies_v1')
+        const existing = raw ? JSON.parse(raw) : []
+        const next = [policy, ...existing]
+        localStorage.setItem('catalogue_login_policies_v1', JSON.stringify(next))
+        setLoginPolicies(next)
+        // mark schema approved
+        setSchemas((prev) => prev.map((s) => (s.id === schema.id ? { ...s, status: 'approved', approvedAt: new Date().toLocaleString() } : s)))
+        addAudit('Approve Login Policy', `Approved login policy ${schema.name}`)
+      } catch (e) {
+        alert('Failed to persist login policy: ' + String(e))
+      }
+    } else {
+      // registration / other schema types
+      setSchemas((prev) => prev.map((s) => (s.id === schema.id ? { ...s, status: 'approved', approvedAt: new Date().toLocaleString() } : s)))
+      if (schema.type === 'registration' && schema.orgId) {
+        setOrganizations(prev => prev.map(o => o.id === schema.orgId ? ({ ...o, registrationSchemas: [...(o.registrationSchemas||[]), schema] }) : o));
+      }
+      addAudit('Approve Schema', `Schema ${schema.name} approved`)
+    }
     setOrgApprovalModal(null)
   }
 
   const rejectSchema = (schema) => {
     setSchemas((prev) => prev.map((s) => (s.id === schema.id ? { ...s, status: 'rejected', rejectedAt: new Date().toLocaleString() } : s)))
+    addAudit('Reject Schema', `Schema ${schema.name} rejected`)
     setOrgApprovalModal(null)
   }
 
@@ -301,19 +338,24 @@ function App() {
   )
 
   const renderPlatformSidebar = () => {
+    const pendingSchemas = schemas.filter(s => s.status === 'pending').length
+    const pendingApps = applications.filter(a => a.status === 'pending').length
+    const pendingTotal = pendingOrganizations.length + pendingSchemas + pendingApps
+
     const navSections = [
       {
         title: null,
         items: [
           { label: 'Dashboard', key: 'platform-dashboard' },
+          { label: 'Pending Items', key: 'platform-pending', badge: pendingTotal }
         ]
       },
       {
         title: 'Management',
         items: [
           { label: 'Organizations', key: 'platform-organizations', badge: pendingOrganizations.length },
-          { label: 'Applications', key: 'platform-apps' },
-          { label: 'Schema Approvals', key: 'platform-schema' },
+          { label: 'Applications', key: 'platform-apps', badge: pendingApps },
+          { label: 'Schema Approvals', key: 'platform-schema', badge: pendingSchemas },
         ]
       },
       {
@@ -467,6 +509,27 @@ function App() {
     </div>
   )
 
+  const renderPlatformPending = () => (
+    <div className="dashboard-shell">
+      {renderPlatformSidebar()}
+      <main className="dashboard-main">
+        {renderHeader('Identity OS — Pending Center')}
+        <header className="dashboard-header"><div><div className="eyebrow">Platform Admin</div><h2>Pending Items</h2></div><button type="button" className="primary-button" onClick={() => setView('home')}>Sign Out</button></header>
+        <div className="panel-copy"><p>Centralized view of all pending organizations, applications, and policies/schemas.</p></div>
+
+        <h4>Pending Organizations</h4>
+        <div className="approval-list">{pendingOrganizations.map((org) => (<div key={org.id} className="approval-card"><div><div className="approval-name">{org.name}</div><div className="approval-meta">{org.type} • {org.country} • {org.id}</div></div><div className="approval-actions"><button className="ghost-button" onClick={() => setOrgApprovalModal({ type: 'org', item: org })}>View</button><button className="primary-button" onClick={() => { approveOrganization(org); addAudit('Approve Organization', `Approved ${org.name}`); }}>Approve</button><button className="secondary-button" onClick={() => { rejectOrganization(org); addAudit('Reject Organization', `Rejected ${org.name}`); }}>Reject</button></div></div>))}</div>
+
+        <h4 style={{marginTop:18}}>Pending Applications</h4>
+        <div className="approval-list">{applications.filter(a=>a.status==='pending').map((app)=> (<div key={app.id} className="approval-card"><div><div className="approval-name">{app.name}</div><div className="approval-meta">{app.orgName} • {app.type} • {app.id}</div></div><div className="approval-actions"><button className="ghost-button" onClick={()=> setOrgApprovalModal({ type: 'app', item: app })}>View</button><button className="primary-button" onClick={()=>{ approveApplication(app); addAudit('Approve Application', `Approved ${app.name}`); }}>Approve</button></div></div>))}</div>
+
+        <h4 style={{marginTop:18}}>Pending Schemas & Policies</h4>
+        <div className="approval-list schema-list">{schemas.filter(s=>s.status==='pending').map((s)=>(<div key={s.id} className="approval-card"><div><div className="approval-name">{s.name}</div><div className="approval-meta">{s.orgName} • {s.type === 'login' ? 'Login Policy' : 'Schema'} • {s.id}</div></div><div className="approval-actions"><button className="ghost-button" onClick={()=> setOrgApprovalModal({ type: 'schema', item: s })}>View</button><button className="primary-button" onClick={()=>{ approveSchema(s); }}>{'Approve'}</button><button className="secondary-button" onClick={()=>{ rejectSchema(s); }}>{'Reject'}</button></div></div>))}</div>
+
+      </main>
+    </div>
+  )
+
   const renderPlatformOrganizations = () => (
     <div className="dashboard-shell">
       {renderPlatformSidebar()}
@@ -520,8 +583,42 @@ function App() {
       <main className="dashboard-main">
         {renderHeader('Identity OS — Schema Approvals')}
         <header className="dashboard-header"><div><div className="eyebrow">Platform Admin</div><h2>Schema Approvals</h2></div><button type="button" className="primary-button" onClick={() => setView('home')}>Sign Out</button></header>
-        <div className="panel-copy"><p>Review and approve schema definitions submitted by organizations.</p></div>
-        <div className="approval-list schema-list">{schemas.map((s) => (<div key={s.id} className="approval-card"><div><div className="approval-name">{s.name}</div><div className="approval-meta">{s.orgName} • Schema • {s.id}</div></div><div className="approval-actions"><button type="button" className="ghost-button" onClick={() => setOrgApprovalModal({ type: 'schema', item: s })}>View</button>{s.status === 'pending' && <button type="button" className="primary-button" onClick={() => { approveSchema(s); addAudit('Approve Schema', `Schema ${s.name} approved`); }}>Approve</button>}{s.status === 'pending' && <button type="button" className="secondary-button" onClick={() => { rejectSchema(s); addAudit('Reject Schema', `Schema ${s.name} rejected`); }}>Reject</button>}{s.status === 'approved' && <span className="nav-badge" style={{background:'#34d399'}}>Approved</span>}{s.status === 'rejected' && <span className="nav-badge" style={{background:'#ef4444'}}>Rejected</span>}</div></div>))}</div>
+        <div className="panel-copy"><p>Review and approve schema definitions and login policies submitted by organizations.</p></div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,marginBottom:12}}>
+          <div className="tab-row" style={{margin:0}}>
+            <button className={`tab ${schemaTab === 'registration' ? 'active' : ''}`} onClick={() => setSchemaTab('registration')}>Registration Schemas</button>
+            <button className={`tab ${schemaTab === 'login' ? 'active' : ''}`} onClick={() => setSchemaTab('login')}>Login Policies</button>
+            <button className={`tab ${schemaTab === 'all' ? 'active' : ''}`} onClick={() => setSchemaTab('all')}>All</button>
+          </div>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            <input placeholder="Search by name or org" value={schemaSearch} onChange={(e)=>setSchemaSearch(e.target.value)} style={{minWidth:220}} />
+            <select value={schemaFilterStatus} onChange={(e)=>setSchemaFilterStatus(e.target.value)}>
+              <option>All</option>
+              <option>Pending</option>
+              <option>Approved</option>
+              <option>Rejected</option>
+            </select>
+          </div>
+        </div>
+        <div className="approval-list schema-list">
+          {schemas.filter(s => {
+            // type filter
+            if (schemaTab === 'registration' && s.type !== 'registration') return false
+            if (schemaTab === 'login' && s.type !== 'login') return false
+            // status filter
+            if (schemaFilterStatus !== 'All') {
+              if (s.status !== schemaFilterStatus.toLowerCase()) return false
+            }
+            // search filter
+            if (schemaSearch && schemaSearch.trim()) {
+              const q = schemaSearch.toLowerCase()
+              if (!((s.name || '').toLowerCase().includes(q) || (s.orgName || '').toLowerCase().includes(q) || (s.id || '').toLowerCase().includes(q))) return false
+            }
+            return true
+          }).map((s) => (
+            <div key={s.id} className="approval-card"><div><div className="approval-name">{s.name}</div><div className="approval-meta">{s.orgName} • {s.type === 'login' ? 'Login Policy' : 'Schema'} • {s.id}</div></div><div className="approval-actions"><button type="button" className="ghost-button" onClick={() => setOrgApprovalModal({ type: 'schema', item: s })}>View</button>{s.status === 'pending' && <button type="button" className="primary-button" onClick={() => { approveSchema(s); }}>Approve</button>}{s.status === 'pending' && <button type="button" className="secondary-button" onClick={() => { rejectSchema(s); }}>Reject</button>}{s.status === 'approved' && <span className="nav-badge" style={{background:'#34d399'}}>Approved</span>}{s.status === 'rejected' && <span className="nav-badge" style={{background:'#ef4444'}}>Rejected</span>}</div></div>
+          ))}
+        </div>
       </main>
       {requestModal && (
         <div className="modal-backdrop" onClick={() => setRequestModal(null)}><div className="modal-card" onClick={(e) => e.stopPropagation()}><div className="modal-header"><h3>Request More Information</h3><button type="button" className="close-button" onClick={() => setRequestModal(null)}>×</button></div><div className="form-card"><label>Message<textarea value={requestModal?.message || ''} onChange={(e) => setRequestModal((prev) => ({ ...prev, message: e.target.value }))} rows={4} /></label><div style={{display:'flex',gap:12,justifyContent:'flex-end',marginTop:12}}><button className="secondary-button" onClick={() => setRequestModal(null)}>Cancel</button><button className="primary-button" onClick={() => { if (requestModal && requestModal.target) { requestMoreInfo(requestModal.target, requestModal.message || 'Please provide additional documentation'); addAudit('Request More Info', `Requested more info for ${requestModal.target.name || requestModal.target.id}`); } setRequestModal(null); }}>Send</button></div></div></div></div>
@@ -548,6 +645,7 @@ function App() {
               <div className="review-block"><label>Created</label><p>{item.createdAt}</p></div>
               <div className="review-block"><label>Status</label><p>{item.status}</p></div>
               <div className="modal-actions">
+                {item.type === 'login' && <button type="button" className="ghost-button" onClick={() => { setPolicyPreviewModal(item); }}>Preview policy JSON</button>}
                 {item.status !== 'approved' && <button type="button" className="primary-button" onClick={() => approveSchema(item)}>Approve</button>}
                 {item.status === 'pending' && <button type="button" className="secondary-button" onClick={() => rejectSchema(item)}>Reject</button>}
               </div>
@@ -605,6 +703,20 @@ function App() {
               <button className="primary-button" onClick={() => setOrgCredentialModal(null)}>Close</button>
             </div>
           </div>
+        </div>
+      </div>
+    )
+  }
+
+  const renderPolicyPreviewModal = () => {
+    if (!policyPreviewModal) return null
+    const item = policyPreviewModal
+    const json = item.payload ? JSON.stringify(item.payload, null, 2) : JSON.stringify({ authenticationMethods: item.authenticationMethods, mfa: item.mfa, mfaMethods: item.mfaMethods, riskAuthentication: item.riskAuthentication, flow: item.flow }, null, 2)
+    return (
+      <div className="modal-backdrop" onClick={() => setPolicyPreviewModal(null)}>
+        <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-header"><h3>Policy JSON Preview</h3><button className="close-button" onClick={() => setPolicyPreviewModal(null)}>×</button></div>
+          <div className="form-card"><pre style={{whiteSpace: 'pre-wrap', maxHeight: 420, overflow: 'auto', background:'#071127', padding:12, borderRadius:8}}>{json}</pre><div style={{display:'flex',justifyContent:'flex-end',marginTop:12}}><button className="primary-button" onClick={() => setPolicyPreviewModal(null)}>Close</button></div></div>
         </div>
       </div>
     )
@@ -726,12 +838,12 @@ function App() {
             <div style={{display:'flex',justifyContent:'flex-end',gap:8}}>
               <button className="secondary-button" onClick={()=>setPublishModal(null)}>Cancel</button>
               <button className="primary-button" onClick={()=>{
-                const newSchema = { id: `schema_${Date.now()}`, name: publishModal.name, orgId: (currentOrg && currentOrg.id) || null, orgName: (currentOrg && currentOrg.name) || 'Unassigned', fields: publishModal.fields, status: 'published', createdAt: new Date().toLocaleString() }
+                const newSchema = { id: `schema_${Date.now()}`, type: 'registration', name: publishModal.name, orgId: (currentOrg && currentOrg.id) || null, orgName: (currentOrg && currentOrg.name) || 'Unassigned', fields: publishModal.fields, status: 'pending', createdAt: new Date().toLocaleString() }
                 setSchemas(prev=>[newSchema,...prev])
-                addAudit('Publish Schema', `Published schema ${newSchema.name}`)
+                addAudit('Submit Registration Schema', `Submitted registration schema ${newSchema.name} for approval`)
                 if (currentOrg && currentOrg.id) { setOrganizations(prev => prev.map(o => o.id === currentOrg.id ? ({ ...o, registrationSchemas: [...(o.registrationSchemas||[]), newSchema] }) : o)); }
                 setPublishModal(null)
-                alert('Schema published successfully')
+                alert('Schema submitted for approval')
               }}>Confirm Publish</button>
             </div>
           </div>
@@ -759,17 +871,20 @@ function App() {
             <div style={{display:'flex',justifyContent:'flex-end',gap:8}}>
               <button className="secondary-button" onClick={()=>setLoginPublishModal(null)}>Cancel</button>
               <button className="primary-button" onClick={()=>{
-                const policy = { ...loginPublishModal, id: loginPublishModal.id || `policy_${Date.now()}`, createdAt: new Date().toLocaleString() }
-                try {
-                  const raw = localStorage.getItem('catalogue_login_policies_v1')
-                  const existing = raw ? JSON.parse(raw) : []
-                  const next = [policy, ...existing]
-                  localStorage.setItem('catalogue_login_policies_v1', JSON.stringify(next))
-                  setLoginPolicies(next)
-                  addAudit('Publish Login Policy', `Published login policy ${policy.name} for ${policy.orgId || 'Global'}`)
-                  setLoginPublishModal(null)
-                  alert('Login policy published')
-                } catch (e) { alert('Failed to persist policy: '+String(e)) }
+                const schemaEntry = {
+                  id: `schema_login_${Date.now()}`,
+                  type: 'login',
+                  name: loginPublishModal.name,
+                  orgId: loginPublishModal.orgId || null,
+                  orgName: (loginPublishModal.orgId && organizations.find(o=>o.id===loginPublishModal.orgId)?.name) || 'Global',
+                  payload: { authenticationMethods: loginPublishModal.authenticationMethods, mfa: loginPublishModal.mfa, mfaMethods: loginPublishModal.mfaMethods, riskAuthentication: loginPublishModal.riskAuthentication, flow: loginPublishModal.flow },
+                  status: 'pending',
+                  createdAt: new Date().toLocaleString()
+                }
+                setSchemas(prev => [schemaEntry, ...prev])
+                addAudit('Submit Login Policy', `Submitted login policy ${schemaEntry.name} for approval`)
+                setLoginPublishModal(null)
+                alert('Login policy submitted for platform approval')
               }}>Confirm Publish</button>
             </div>
           </div>
@@ -928,6 +1043,7 @@ function App() {
       {view === 'platform-identity-mgmt' && renderPlatformIdentityMgmt()}
       {view === 'platform-settings' && renderPlatformOrganizations()}
       {view === 'platform-schema' && renderPlatformSchema && renderPlatformSchema()}
+      {view === 'platform-pending' && renderPlatformPending && renderPlatformPending()}
       {view === 'organization' && renderOrganizationLogin()}
       {view === 'org-registration-builder' && <RegistrationBuilder />}
       {view === 'org-login-builder' && <LoginBuilder />}
@@ -938,6 +1054,7 @@ function App() {
       {orgCredentialModal && renderCredentialModal()}
       {publishModal && renderPublishModal()}
       {loginPublishModal && renderLoginPublishModal()}
+      {policyPreviewModal && renderPolicyPreviewModal()}
     </main>
   )
 }
