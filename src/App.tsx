@@ -1,7 +1,138 @@
-import { useMemo, useState, useEffect } from 'react'
-import './App.css'
+'use client'
 
-const initialPendingOrganizations = [
+import { useMemo, useState, useEffect } from 'react'
+
+interface RegistrationDetails {
+  registrationNumber: string
+  gst?: string
+}
+
+interface Representative {
+  name: string
+  email: string
+  mobile: string
+  designation: string
+}
+
+interface RegistrationField {
+  name: string
+  label?: string
+  type: string
+  required?: boolean
+  regex?: string | null
+  verification?: string | null
+  encrypted?: boolean
+  options?: string[]
+}
+
+interface Organization {
+  id: string
+  name: string
+  orgId?: string | null
+  orgName?: string
+  type?: string
+  country?: string
+  email?: string
+  status: string
+  registrationDetails?: RegistrationDetails
+  representative?: Representative
+  documents?: { name: string }[]
+  submittedAt?: string
+  createdAt?: string
+  approvedAt?: string
+  rejectedAt?: string
+  suspendedAt?: string
+  resumedAt?: string
+  orgAdminActivated?: boolean
+  infoRequest?: { message: string; requestedAt: string }
+  registrationSchemas?: SchemaRecord[]
+  fields?: Array<string | RegistrationField>
+  payload?: Omit<LoginPolicy, 'id' | 'name' | 'orgId' | 'createdAt'>
+}
+
+interface ApplicationRecord {
+  id: string
+  orgId: string
+  orgName: string
+  name: string
+  type: string
+  status: string
+  description?: string
+  contactEmail?: string
+  domain?: string
+  redirectUri?: string
+  logoutUri?: string
+  clientId?: string
+  clientSecret?: string
+  createdAt?: string
+  approvedAt?: string
+  rejectedAt?: string
+  registrationDetails?: RegistrationDetails
+  representative?: Representative
+  documents?: { name: string }[]
+  submittedAt?: string
+  fields?: Array<string | RegistrationField>
+  payload?: Omit<LoginPolicy, 'id' | 'name' | 'orgId' | 'createdAt'>
+}
+
+interface LoginPolicy {
+  id: string
+  name: string
+  authenticationMethods: string[]
+  mfa: boolean
+  mfaMethods: string[]
+  riskAuthentication: boolean
+  flow: string[]
+  orgId: string | null
+  createdAt: string
+}
+
+interface SchemaRecord {
+  id: string
+  type: string
+  name: string
+  orgId?: string | null
+  orgName?: string
+  fields?: Array<string | RegistrationField>
+  payload?: Omit<LoginPolicy, 'id' | 'name' | 'orgId' | 'createdAt'>
+  status: string
+  createdAt: string
+  approvedAt?: string
+  rejectedAt?: string
+}
+
+interface AuditLog {
+  id: string
+  action: string
+  details: string
+  timestamp: string
+}
+
+interface SavedState {
+  organizations?: Organization[]
+  pendingOrganizations?: Organization[]
+  approvedOrganizations?: Organization[]
+  applications?: ApplicationRecord[]
+  schemas?: SchemaRecord[]
+}
+
+type ApprovalModal = { type: 'org'; item: Organization } | { type: 'app'; item: ApplicationRecord } | { type: 'schema'; item: SchemaRecord }
+type RequestModal = { target: Organization; message?: string; open?: boolean }
+type CredentialModal = { org: Organization; username: string; password: string }
+type AppCredentialModal = { app: ApplicationRecord; clientId?: string; clientSecret?: string }
+type ConfirmModal = { title: string; message: string; onConfirm: () => Promise<void> | void }
+
+const readStorage = (key: string): string | null => {
+  if (typeof window === 'undefined') return null
+  return window.localStorage.getItem(key)
+}
+
+const writeStorage = (key: string, value: string) => {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(key, value)
+}
+
+const initialPendingOrganizations: Organization[] = [
   {
     id: 'org_fs8b2c4e',
     name: 'Apex Digital',
@@ -28,12 +159,12 @@ const initialPendingOrganizations = [
   },
 ]
 
-const initialApplications = [
+const initialApplications: ApplicationRecord[] = [
   { id: 'app-101', orgId: 'org_7k3m9p2x', orgName: 'TechNova Solutions', name: 'Identity Suite', type: 'web', status: 'pending' },
   { id: 'app-102', orgId: 'org_fs8b2c4e', orgName: 'Apex Digital', name: 'Apex Access Portal', type: 'mobile', status: 'pending' },
 ]
 
-const initialSchemas = [
+const initialSchemas: SchemaRecord[] = [
   { id: 'schema_001', type: 'registration', name: 'Employee Schema', orgId: 'org_7k3m9p2x', orgName: 'TechNova Solutions', fields: ['firstName','lastName','email','employeeId'], status: 'pending', createdAt: '2026-07-20, 10:32 am' },
   { id: 'schema_002', type: 'registration', name: 'Customer Profile', orgId: 'org_fs8b2c4e', orgName: 'Apex Digital', fields: ['name','email','phone','address'], status: 'pending', createdAt: '2026-08-05, 03:40 pm' },
 ]
@@ -49,25 +180,25 @@ function App() {
   })
   const [platformLogin, setPlatformLogin] = useState({ username: '', password: '' })
   const [platformLoginError, setPlatformLoginError] = useState('')
-  const [pendingOrganizations, setPendingOrganizations] = useState(initialPendingOrganizations)
-  const [approvedOrganizations, setApprovedOrganizations] = useState([{ id: 'org_7k3m9p2x', name: 'TechNova Solutions', status: 'approved', email: 'admin@technova.io', country: 'India' }])
-  const [applications, setApplications] = useState(initialApplications)
-  const [schemas, setSchemas] = useState(initialSchemas)
+  const [pendingOrganizations, setPendingOrganizations] = useState<Organization[]>(initialPendingOrganizations)
+  const [approvedOrganizations, setApprovedOrganizations] = useState<Organization[]>([{ id: 'org_7k3m9p2x', name: 'TechNova Solutions', status: 'approved', email: 'admin@technova.io', country: 'India' }])
+  const [applications, setApplications] = useState<ApplicationRecord[]>(initialApplications)
+  const [schemas, setSchemas] = useState<SchemaRecord[]>(initialSchemas)
   const [schemaTab, setSchemaTab] = useState('registration')
   const [schemaSearch, setSchemaSearch] = useState('')
   const [schemaFilterStatus, setSchemaFilterStatus] = useState('All')
-  const [policyPreviewModal, setPolicyPreviewModal] = useState(null)
+  const [policyPreviewModal, setPolicyPreviewModal] = useState<SchemaRecord | LoginPolicy | null>(null)
   const [registerAppModal, setRegisterAppModal] = useState(false)
   const [registerAppForm, setRegisterAppForm] = useState({ name:'', type:'web', description:'', contactEmail:'', domain:'', redirectUri:'', logoutUri:'' })
   const [appSearch, setAppSearch] = useState('')
   const [appFilterStatus, setAppFilterStatus] = useState('All')
-  const [auditLogs, setAuditLogs] = useState(() => { try { const raw = localStorage.getItem('catalogue_audit_v1'); return raw ? JSON.parse(raw) : [] } catch(e) { return [] } })
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => { try { const raw = readStorage('catalogue_audit_v1'); return raw ? JSON.parse(raw) : [] } catch { return [] } })
 
-  const [loginPolicies, setLoginPolicies] = useState(() => {
-    try { const raw = localStorage.getItem('catalogue_login_policies_v1'); return raw ? JSON.parse(raw) : [] } catch(e) { return [] }
+  const [loginPolicies, setLoginPolicies] = useState<LoginPolicy[]>(() => {
+    try { const raw = readStorage('catalogue_login_policies_v1'); return raw ? JSON.parse(raw) : [] } catch { return [] }
   })
 
-  const addAudit = (action, details) => {
+  const addAudit = (action: string, details: string) => {
     const entry = { id: `audit_${Date.now()}`, action, details, timestamp: new Date().toLocaleString() }
     setAuditLogs(prev => [entry, ...prev])
   }
@@ -75,16 +206,16 @@ function App() {
   // local persistence: try to load saved state from localStorage
   const loadSaved = () => {
     try {
-      const raw = localStorage.getItem('catalogue_state_v1')
+      const raw = readStorage('catalogue_state_v1')
       if (!raw) return null
-      return JSON.parse(raw)
-    } catch (e) {
+      return JSON.parse(raw) as SavedState
+    } catch {
       return null
     }
   }
   const saved = loadSaved()
   // organizations: unified list used by the Platform Organizations view. Keep in sync with pending/approved lists where needed.
-  const [organizations, setOrganizations] = useState(() => {
+  const [organizations, setOrganizations] = useState<Organization[]>(() => {
     if (saved && saved.organizations) return saved.organizations
     // start with approved then pending
     const seed = [
@@ -94,18 +225,18 @@ function App() {
     return seed
   })
   const [orgsFilter, setOrgsFilter] = useState('All')
-  const [orgApprovalModal, setOrgApprovalModal] = useState(null)
+  const [orgApprovalModal, setOrgApprovalModal] = useState<ApprovalModal | null>(null)
   const [orgLoginStage, setOrgLoginStage] = useState(1)
   const [orgLoginId, setOrgLoginId] = useState('')
   const [orgLoginChannel, setOrgLoginChannel] = useState('email')
   const [orgOtp, setOrgOtp] = useState('')
   const [orgLoginError, setOrgLoginError] = useState('')
-  const [successData, setSuccessData] = useState(null)
+  const [successData, setSuccessData] = useState<{ orgId: string; createdAt: string; status: string } | null>(null)
 
   const currentOrg = useMemo(() => approvedOrganizations.find((org) => org.id === orgLoginId) || null, [approvedOrganizations, orgLoginId])
   const registrationSteps = ['Basic Info', 'Registration Details', 'Representative Details', 'Address', 'Digital Presence']
 
-  const updateField = (field, value) => setRegistrationForm((prev) => ({ ...prev, [field]: value }))
+  const updateField = (field: keyof typeof registrationForm, value: string) => setRegistrationForm((prev) => ({ ...prev, [field]: value }))
   const nextStep = () => setStep((prev) => Math.min(prev + 1, registrationSteps.length - 1))
   const previousStep = () => setStep((prev) => Math.max(prev - 1, 0))
   const generateOrgId = () => `org_${Math.random().toString(36).slice(2, 10)}`
@@ -187,7 +318,7 @@ function App() {
   const approveApplication = (app) => {
     // generate client credentials
     const clientId = `client_${Math.random().toString(36).slice(2,10)}`
-    const clientSecret = (() => { try { const arr = new Uint8Array(24); window.crypto.getRandomValues(arr); return Array.from(arr).map(b=>('0'+b.toString(16)).slice(-2)).join('') } catch(e) { return Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2) } })()
+    const clientSecret = (() => { try { const arr = new Uint8Array(24); window.crypto.getRandomValues(arr); return Array.from(arr).map(b=>('0'+b.toString(16)).slice(-2)).join('') } catch { return Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2) } })()
     const updated = { ...app, status: 'approved', clientId, clientSecret, approvedAt: new Date().toLocaleString() }
     setApplications((prev) => prev.map((item) => (item.id === app.id ? updated : item)))
     // show credentials modal to platform admin (so they can copy and share)
@@ -239,29 +370,26 @@ function App() {
   }
 
   // Request more info modal state
-  const [requestModal, setRequestModal] = useState(null)
+  const [requestModal, setRequestModal] = useState<RequestModal | null>(null)
   // Org credential modal shown after approval (mocked credentials)
-  const [orgCredentialModal, setOrgCredentialModal] = useState(null)
+  const [orgCredentialModal, setOrgCredentialModal] = useState<CredentialModal | null>(null)
   // App credential modal shown after app approval (client id / secret)
-  const [appCredentialModal, setAppCredentialModal] = useState(null)
-  // flags to allow one-time reveal of credentials in UI
-  const [revealedOrgCred, setRevealedOrgCred] = useState(null)
-  const [revealedAppCred, setRevealedAppCred] = useState(null)
+  const [appCredentialModal, setAppCredentialModal] = useState<AppCredentialModal | null>(null)
   // publish modal for registration builder
-  const [publishModal, setPublishModal] = useState(null)
+  const [publishModal, setPublishModal] = useState<SchemaRecord | null>(null)
   // publish modal for login policies
-  const [loginPublishModal, setLoginPublishModal] = useState(null)
+  const [loginPublishModal, setLoginPublishModal] = useState<LoginPolicy | null>(null)
   // generic confirm modal state: { title, message, onConfirm }
-  const [confirmModal, setConfirmModal] = useState(null)
+  const [confirmModal, setConfirmModal] = useState<ConfirmModal | null>(null)
   const [confirmProcessing, setConfirmProcessing] = useState(false)
 
   useEffect(() => {
     // save key parts of app state to localStorage on change
     try {
       const toSave = { organizations, pendingOrganizations, approvedOrganizations, applications, schemas }
-      localStorage.setItem('catalogue_state_v1', JSON.stringify(toSave))
-      localStorage.setItem('catalogue_audit_v1', JSON.stringify(auditLogs))
-    } catch (e) {
+      writeStorage('catalogue_state_v1', JSON.stringify(toSave))
+      writeStorage('catalogue_audit_v1', JSON.stringify(auditLogs))
+    } catch {
       // ignore
     }
   }, [organizations, pendingOrganizations, approvedOrganizations, applications, schemas, auditLogs, loginPolicies])
@@ -448,7 +576,7 @@ function App() {
     }
 
     if (step === 3) {
-      return <div className="step-row"><label>ADDRESS*<textarea value={registrationForm.address} onChange={(e) => updateField('address', e.target.value)} placeholder="Street, city, state, postal code, country" rows="5" /></label></div>
+      return <div className="step-row"><label>ADDRESS*<textarea value={registrationForm.address} onChange={(e) => updateField('address', e.target.value)} placeholder="Street, city, state, postal code, country" rows={5} /></label></div>
     }
 
     return (
@@ -644,7 +772,7 @@ function App() {
 
   const renderApprovalModal = () => {
     if (!orgApprovalModal) return null
-    const item = orgApprovalModal.item
+    const item = orgApprovalModal.item as Organization & ApplicationRecord & SchemaRecord
     return (
       <div className="modal-backdrop" onClick={() => setOrgApprovalModal(null)}>
         <div className="modal-card" onClick={(e) => e.stopPropagation()}>
@@ -715,7 +843,7 @@ function App() {
             <div className="review-block"><label>Username</label><p><code style={{background:'rgba(0,0,0,0.25)',padding:'4px 8px',borderRadius:6}}>{username}</code></p></div>
             <div className="review-block"><label>Password</label><p><code style={{background:'rgba(0,0,0,0.25)',padding:'4px 8px',borderRadius:6}}>{password}</code></p></div>
             <div style={{display:'flex',justifyContent:'flex-end',gap:12,marginTop:12}}>
-              <button className="secondary-button" onClick={() => { try { navigator.clipboard.writeText(`username: ${username}\npassword: ${password}`); alert('Credentials copied to clipboard') } catch (e) { alert('Unable to copy to clipboard in this environment') } }}>Copy</button>
+              <button className="secondary-button" onClick={() => { try { navigator.clipboard.writeText(`username: ${username}\npassword: ${password}`); alert('Credentials copied to clipboard') } catch { alert('Unable to copy to clipboard in this environment') } }}>Copy</button>
               <button className="primary-button" onClick={() => setOrgCredentialModal(null)}>Close</button>
             </div>
           </div>
@@ -727,7 +855,11 @@ function App() {
   const renderPolicyPreviewModal = () => {
     if (!policyPreviewModal) return null
     const item = policyPreviewModal
-    const json = item.payload ? JSON.stringify(item.payload, null, 2) : JSON.stringify({ authenticationMethods: item.authenticationMethods, mfa: item.mfa, mfaMethods: item.mfaMethods, riskAuthentication: item.riskAuthentication, flow: item.flow }, null, 2)
+    const json = 'payload' in item && item.payload
+      ? JSON.stringify(item.payload, null, 2)
+      : 'authenticationMethods' in item
+        ? JSON.stringify({ authenticationMethods: item.authenticationMethods, mfa: item.mfa, mfaMethods: item.mfaMethods, riskAuthentication: item.riskAuthentication, flow: item.flow }, null, 2)
+        : JSON.stringify({}, null, 2)
     return (
       <div className="modal-backdrop" onClick={() => setPolicyPreviewModal(null)}>
         <div className="modal-card" onClick={(e) => e.stopPropagation()}>
@@ -764,8 +896,8 @@ function App() {
 
   function RegistrationBuilder() {
     const [fields, setFields] = useState(() => {
-      try { const saved = JSON.parse(localStorage.getItem('registration_builder')) ; return saved || [{ name: 'fullName', label: 'Full Name', type: 'text', required: true }]
-      } catch (e) { return [{ name: 'fullName', label: 'Full Name', type: 'text', required: true }] }
+      try { const saved = JSON.parse(readStorage('registration_builder') || 'null') ; return saved || [{ name: 'fullName', label: 'Full Name', type: 'text', required: true }]
+      } catch { return [{ name: 'fullName', label: 'Full Name', type: 'text', required: true }] }
     })
     const [selectedIndex, setSelectedIndex] = useState(0)
 
@@ -839,8 +971,8 @@ function App() {
                   <div style={{display:'flex',gap:8,marginTop:8}}><button className="secondary-button" onClick={()=>moveUp(selectedIndex)}>Move Up</button><button className="secondary-button" onClick={()=>removeField(selectedIndex)}>Remove</button></div>
                 </div>
                 <div style={{marginTop:12,display:'flex',flexDirection:'column',gap:8}}>
-                  <input placeholder="Schema name (e.g., Customer Signup)" value={localStorage.getItem('registration_builder_schema_name')||''} onChange={(e)=>{ const name=e.target.value; /* store transient name in localStorage separately */ localStorage.setItem('registration_builder_schema_name', name); }} />
-                  <div style={{display:'flex',gap:8}}><button className="primary-button" onClick={()=>{ localStorage.setItem('registration_builder', JSON.stringify(fields)); alert('Saved registration form schema to localStorage') }}>Save Draft</button><button className="ghost-button" onClick={()=>{ const schemaName = localStorage.getItem('registration_builder_schema_name') || `Schema_${Date.now()}`; const preview = { id: `schema_preview_${Date.now()}`, name: schemaName, orgId: null, orgName: (currentOrg && currentOrg.name) || 'Unassigned', fields: fields.map(f=>({ name:f.name, label:f.label, type:f.type, required:!!f.required, regex:f.regex||null, verification:f.verification||null, encrypted:!!f.encrypted, options:f.options||[] })), status: 'preview', createdAt: new Date().toLocaleString() }; setPublishModal(preview); }}>Publish</button></div></div>
+                  <input placeholder="Schema name (e.g., Customer Signup)" defaultValue={readStorage('registration_builder_schema_name') || ''} onChange={(e)=>{ const name=e.target.value; /* store transient name in localStorage separately */ localStorage.setItem('registration_builder_schema_name', name); }} />
+                  <div style={{display:'flex',gap:8}}><button className="primary-button" onClick={()=>{ localStorage.setItem('registration_builder', JSON.stringify(fields)); alert('Saved registration form schema to localStorage') }}>Save Draft</button><button className="ghost-button" onClick={()=>{ const schemaName = localStorage.getItem('registration_builder_schema_name') || `Schema_${Date.now()}`; const preview: SchemaRecord = { id: `schema_preview_${Date.now()}`, type: 'registration', name: schemaName, orgId: null, orgName: (currentOrg && currentOrg.name) || 'Unassigned', fields: fields.map(f=>({ name:f.name, label:f.label, type:f.type, required:!!f.required, regex:f.regex||null, verification:f.verification||null, encrypted:!!f.encrypted, options:f.options||[] })), status: 'preview', createdAt: new Date().toLocaleString() }; setPublishModal(preview); }}>Publish</button></div></div>
               </>
             )}
           </div>
@@ -950,9 +1082,9 @@ function App() {
           <div className="modal-header"><h3>Publish Schema</h3><button className="close-button" onClick={()=>setPublishModal(null)}>×</button></div>
           <div className="form-card">
             <div className="review-block"><label>Name</label><p>{publishModal.name}</p></div>
-            <div className="review-block"><label>Fields</label><p>{publishModal.fields.map(f=>f.label).join(', ')}</p></div>
+            <div className="review-block"><label>Fields</label><p>{(publishModal.fields || []).map(f=>typeof f === 'string' ? f : f.label).join(', ')}</p></div>
             <div className="review-block"><label>Target Organization</label>
-              <select defaultValue={publishModal.orgId || 'GLOBAL'} onChange={(e)=>{ const val = e.target.value; setPublishModal(prev => ({ ...prev, orgId: val === 'GLOBAL' ? null : val })); }}>
+              <select defaultValue={publishModal.orgId || 'GLOBAL'} onChange={(e)=>{ const val = e.target.value; setPublishModal(prev => prev ? ({ ...prev, orgId: val === 'GLOBAL' ? null : val }) : prev); }}>
                 <option value="GLOBAL">Global (no org)</option>
                 {organizations.map(o => <option key={o.id} value={o.id}>{o.name} — {o.id}</option>)}
               </select>
@@ -985,7 +1117,7 @@ function App() {
             <div className="review-block"><label>Policy</label><p>{loginPublishModal.name}</p></div>
             <div className="review-block"><label>Authentication Methods</label><p>{(loginPublishModal.authenticationMethods||[]).join(', ')}</p></div>
             <div className="review-block"><label>Target Organization</label>
-              <select defaultValue={defaultSelection} onChange={(e)=>{ const val = e.target.value; setLoginPublishModal(prev => ({ ...prev, orgId: val === 'GLOBAL' ? null : val })) }}>
+              <select defaultValue={defaultSelection} onChange={(e)=>{ const val = e.target.value; setLoginPublishModal(prev => prev ? ({ ...prev, orgId: val === 'GLOBAL' ? null : val }) : prev) }}>
                 <option value="GLOBAL">Global (no org)</option>
                 {organizations.map(o => <option key={o.id} value={o.id}>{o.name} — {o.id}</option>)}
               </select>
@@ -1027,15 +1159,15 @@ function App() {
     ]
 
     const [selectedMethods, setSelectedMethods] = useState(() => {
-      try { const raw = localStorage.getItem('catalogue_login_builder_methods'); return raw ? JSON.parse(raw) : ['PASSWORD'] } catch(e) { return ['PASSWORD'] }
+      try { const raw = readStorage('catalogue_login_builder_methods'); return raw ? JSON.parse(raw) : ['PASSWORD'] } catch { return ['PASSWORD'] }
     })
     const [flowSteps, setFlowSteps] = useState(() => {
-      try { const raw = localStorage.getItem('catalogue_login_builder_flow'); return raw ? JSON.parse(raw) : ['Identifier','Identity Lookup','Authentication Verification','MFA Check','Success'] } catch(e) { return ['Identifier','Identity Lookup','Authentication Verification','MFA Check','Success'] }
+      try { const raw = readStorage('catalogue_login_builder_flow'); return raw ? JSON.parse(raw) : ['Identifier','Identity Lookup','Authentication Verification','MFA Check','Success'] } catch { return ['Identifier','Identity Lookup','Authentication Verification','MFA Check','Success'] }
     })
-    const [mfaEnabled, setMfaEnabled] = useState(() => { try { const raw = localStorage.getItem('catalogue_login_builder_mfa'); return raw ? JSON.parse(raw) : true } catch(e) { return true } })
-    const [mfaMethods, setMfaMethods] = useState(() => { try { const raw = localStorage.getItem('catalogue_login_builder_mfa_methods'); return raw ? JSON.parse(raw) : ['OTP'] } catch(e) { return ['OTP'] } })
-    const [riskAuth, setRiskAuth] = useState(() => { try { const raw = localStorage.getItem('catalogue_login_builder_risk'); return raw ? JSON.parse(raw) : false } catch(e) { return false } })
-    const [policyName, setPolicyName] = useState(() => localStorage.getItem('catalogue_login_builder_policy_name') || `Login Policy ${new Date().toLocaleDateString()}`)
+    const [mfaEnabled, setMfaEnabled] = useState(() => { try { const raw = readStorage('catalogue_login_builder_mfa'); return raw ? JSON.parse(raw) : true } catch { return true } })
+    const [mfaMethods, setMfaMethods] = useState(() => { try { const raw = readStorage('catalogue_login_builder_mfa_methods'); return raw ? JSON.parse(raw) : ['OTP'] } catch { return ['OTP'] } })
+    const [riskAuth, setRiskAuth] = useState(() => { try { const raw = readStorage('catalogue_login_builder_risk'); return raw ? JSON.parse(raw) : false } catch { return false } })
+    const [policyName, setPolicyName] = useState(() => readStorage('catalogue_login_builder_policy_name') || `Login Policy ${new Date().toLocaleDateString()}`)
 
     const toggleMethod = (key) => {
       setSelectedMethods((prev) => {
@@ -1127,7 +1259,7 @@ function App() {
                             ))}
               <div style={{display:'flex',gap:8}}>
                 <input placeholder="New step" id="newFlowStepInput" />
-                <button className="ghost-button" onClick={()=>{ const el = document.getElementById('newFlowStepInput'); if (!el) return; const v = el.value.trim(); if (!v) return; setFlowSteps(prev=>{ const next=[...prev, v]; localStorage.setItem('catalogue_login_builder_flow', JSON.stringify(next)); return next }); el.value=''; }}>Add Step</button>
+                <button className="ghost-button" onClick={()=>{ const el = document.getElementById('newFlowStepInput') as HTMLInputElement | null; if (!el) return; const v = el.value.trim(); if (!v) return; setFlowSteps(prev=>{ const next=[...prev, v]; localStorage.setItem('catalogue_login_builder_flow', JSON.stringify(next)); return next }); el.value=''; }}>Add Step</button>
               </div>
             </div>
           </div>
@@ -1173,7 +1305,7 @@ function App() {
             <div className="review-block"><label>Client ID</label><p style={{wordBreak:'break-all'}}>{clientId}</p></div>
             <div className="review-block"><label>Client Secret</label><p style={{wordBreak:'break-all',fontFamily:'monospace'}}>{clientSecret}</p></div>
             <div style={{display:'flex',justifyContent:'flex-end',gap:8}}>
-              <button className="secondary-button" onClick={() => { try { navigator.clipboard.writeText(`clientId: ${clientId}\nclientSecret: ${clientSecret}`); alert('Credentials copied to clipboard') } catch (e) { alert('Unable to copy to clipboard in this environment') } }}>Copy</button>
+              <button className="secondary-button" onClick={() => { try { navigator.clipboard.writeText(`clientId: ${clientId}\nclientSecret: ${clientSecret}`); alert('Credentials copied to clipboard') } catch { alert('Unable to copy to clipboard in this environment') } }}>Copy</button>
               <button className="primary-button" onClick={() => setAppCredentialModal(null)}>Close</button>
             </div>
           </div>
@@ -1241,6 +1373,31 @@ function App() {
     </div>
   )
 
+  const renderPlatformAudit = () => (
+    <div className="dashboard-shell">
+      {renderPlatformSidebar()}
+      <main className="dashboard-main">
+        {renderHeader('Identity OS - Audit Logs')}
+        <header className="dashboard-header">
+          <div><div className="eyebrow">Platform Admin</div><h2>Audit Logs</h2></div>
+          <button type="button" className="primary-button" onClick={() => setView('home')}>Sign Out</button>
+        </header>
+        <div className="approval-list">
+          {auditLogs.length === 0 && <div className="form-card">No audit entries yet.</div>}
+          {auditLogs.map((log) => (
+            <div key={log.id} className="form-card" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <div>
+                <div style={{fontWeight:700}}>{log.action}</div>
+                <div style={{color:'rgba(218,228,255,0.7)'}}>{log.details}</div>
+              </div>
+              <div style={{fontSize:12,opacity:0.8}}>{log.timestamp}</div>
+            </div>
+          ))}
+        </div>
+      </main>
+    </div>
+  )
+
   return (
     <main className="app-shell">
       {view === 'home' && renderHome()}
@@ -1269,6 +1426,7 @@ function App() {
       {publishModal && renderPublishModal()}
       {loginPublishModal && renderLoginPublishModal()}
       {policyPreviewModal && renderPolicyPreviewModal()}
+      {confirmModal && renderConfirmModal()}
     </main>
   )
 }

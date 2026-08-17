@@ -1,11 +1,23 @@
 import React from 'react'
-export default function AuditList({ logs }) {
+
+export interface AuditLog {
+  id: string
+  action: string
+  details: string
+  timestamp: string
+}
+
+interface AuditListProps {
+  logs?: AuditLog[]
+}
+
+export default function AuditList({ logs = [] }: AuditListProps) {
   return (
     <div>
       <h3>Audit Logs</h3>
       <div style={{display:'grid',gap:8}}>
-        {(!logs || logs.length===0) && <div className="form-card">No audit entries yet.</div>}
-        {(logs || []).map(l => (
+        {logs.length===0 && <div className="form-card">No audit entries yet.</div>}
+        {logs.map(l => (
           <div key={l.id} className="form-card" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <div>
               <div style={{fontWeight:700}}>{l.action}</div>
