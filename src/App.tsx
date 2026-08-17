@@ -33,6 +33,11 @@ interface Organization {
   type?: string
   country?: string
   email?: string
+  phone?: string
+  address?: string
+  website?: string
+  domain?: string
+  registrationType?: string
   status: string
   registrationDetails?: RegistrationDetails
   representative?: Representative
@@ -172,6 +177,40 @@ const initialSchemas: SchemaRecord[] = [
 const approvedOrgIds = ['org_7k3m9p2x', 'org_b8c5d1k9', 'org_f9e2h4q7']
 const orgAdminMenu = ['Dashboard', 'Organization Profile', 'Applications', 'Registration Builder', 'Login Configuration', 'Auth Policies', 'Users', 'Identity Management', 'API Credentials', 'Webhooks', 'Audit Logs', 'Settings']
 
+const AdminIcon = ({ name }: { name?: string }) => {
+  const common = { fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
+  const paths = {
+    shield: <><path {...common} d="M12 3l7 3v5c0 4.5-2.8 8-7 10-4.2-2-7-5.5-7-10V6l7-3z" /><path {...common} d="M9 12l2 2 4-5" /></>,
+    dashboard: <><rect {...common} x="4" y="4" width="6" height="6" /><rect {...common} x="14" y="4" width="6" height="6" /><rect {...common} x="4" y="14" width="6" height="6" /><rect {...common} x="14" y="14" width="6" height="6" /></>,
+    organizations: <><path {...common} d="M6 21V7h8v14" /><path {...common} d="M10 21V3h8v18" /><path {...common} d="M8 11h2M8 15h2M12 7h2M12 11h2M12 15h2" /></>,
+    applications: <><path {...common} d="M12 4l8 4-8 4-8-4 8-4z" /><path {...common} d="M4 12l8 4 8-4" /><path {...common} d="M4 16l8 4 8-4" /></>,
+    schema: <><path {...common} d="M7 3h7l4 4v14H7V3z" /><path {...common} d="M14 3v5h5" /><path {...common} d="M10 13l2 2 3-5" /></>,
+    identity: <><circle {...common} cx="9" cy="8" r="4" /><path {...common} d="M3 21c.7-4 3-6 6-6 2 0 3.6.8 4.8 2.4" /><path {...common} d="M17 8v6M14 11h6" /></>,
+    auth: <><path {...common} d="M4 12h4l2-7 4 14 2-7h4" /></>,
+    audit: <><path {...common} d="M8 4h8l2 3v14H6V7l2-3z" /><path {...common} d="M9 12h6M9 16h6M10 4v4h4V4" /></>,
+    security: <><path {...common} d="M12 3l7 3v5c0 4.5-2.8 8-7 10-4.2-2-7-5.5-7-10V6l7-3z" /></>,
+    api: <><path {...common} d="M8 7H5a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h3M16 7h3a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-3M9 17h6M9 21h6" /></>,
+    trust: <><path {...common} d="M5 13l4 4L19 7" /><path {...common} d="M5 5h14v14H5z" /></>,
+    reports: <><path {...common} d="M6 20V10M12 20V4M18 20v-7" /></>,
+    notifications: <><path {...common} d="M18 16v-5a6 6 0 1 0-12 0v5l-2 3h16l-2-3z" /><path {...common} d="M10 21h4" /></>,
+    check: <><circle {...common} cx="12" cy="12" r="9" /><path {...common} d="M8 12l3 3 5-6" /></>,
+  }
+
+  return <svg className="admin-icon" viewBox="0 0 24 24" aria-hidden="true">{paths[name] || paths.dashboard}</svg>
+}
+
+const ProfileField = ({ label, value, mono, link }: { label: string; value?: string | null; mono?: boolean; link?: boolean }) => {
+  const displayValue = value || '-'
+  const href = link && displayValue !== '-' ? (displayValue.startsWith('http') ? displayValue : `https://${displayValue}`) : ''
+
+  return (
+    <div className="profile-field">
+      <label>{label}</label>
+      {href ? <a href={href} target="_blank" rel="noreferrer">{displayValue}</a> : <p className={mono ? 'mono' : ''}>{displayValue}</p>}
+    </div>
+  )
+}
+
 function App() {
   const [view, setView] = useState('home')
   const [step, setStep] = useState(0)
@@ -181,7 +220,21 @@ function App() {
   const [platformLogin, setPlatformLogin] = useState({ username: '', password: '' })
   const [platformLoginError, setPlatformLoginError] = useState('')
   const [pendingOrganizations, setPendingOrganizations] = useState<Organization[]>(initialPendingOrganizations)
-  const [approvedOrganizations, setApprovedOrganizations] = useState<Organization[]>([{ id: 'org_7k3m9p2x', name: 'TechNova Solutions', status: 'approved', email: 'admin@technova.io', country: 'India' }])
+  const [approvedOrganizations, setApprovedOrganizations] = useState<Organization[]>([{
+    id: 'org_7k3m9p2x',
+    name: 'TechNova Solutions',
+    type: 'Company',
+    country: 'India',
+    email: 'admin@technova.io',
+    phone: '+91-8765432109',
+    address: 'Embassy Tech Village, Outer Ring Road, Bengaluru, Karnataka - 560103',
+    website: 'https://technova.io',
+    registrationType: 'GST',
+    registrationDetails: { registrationNumber: '27AADCT1234R1Z5', gst: '27AADCT1234R1Z5' },
+    representative: { name: 'Aditya Kumar', email: 'aditya@technova.io', mobile: '+91-8765432109', designation: 'Organization Admin' },
+    status: 'approved',
+    orgAdminActivated: true
+  }])
   const [applications, setApplications] = useState<ApplicationRecord[]>(initialApplications)
   const [schemas, setSchemas] = useState<SchemaRecord[]>(initialSchemas)
   const [schemaTab, setSchemaTab] = useState('registration')
@@ -219,7 +272,21 @@ function App() {
     if (saved && saved.organizations) return saved.organizations
     // start with approved then pending
     const seed = [
-      { id: 'org_7k3m9p2x', name: 'TechNova Solutions', type: 'Company', country: 'India', email: 'admin@technova.io', status: 'approved' },
+      {
+        id: 'org_7k3m9p2x',
+        name: 'TechNova Solutions',
+        type: 'Company',
+        country: 'India',
+        email: 'admin@technova.io',
+        phone: '+91-8765432109',
+        address: 'Embassy Tech Village, Outer Ring Road, Bengaluru, Karnataka - 560103',
+        website: 'https://technova.io',
+        registrationType: 'GST',
+        registrationDetails: { registrationNumber: '27AADCT1234R1Z5', gst: '27AADCT1234R1Z5' },
+        representative: { name: 'Aditya Kumar', email: 'aditya@technova.io', mobile: '+91-8765432109', designation: 'Organization Admin' },
+        status: 'approved',
+        orgAdminActivated: true
+      },
       ...initialPendingOrganizations.map(o => ({ ...o })),
     ]
     return seed
@@ -233,7 +300,12 @@ function App() {
   const [orgLoginError, setOrgLoginError] = useState('')
   const [successData, setSuccessData] = useState<{ orgId: string; createdAt: string; status: string } | null>(null)
 
-  const currentOrg = useMemo(() => approvedOrganizations.find((org) => org.id === orgLoginId) || null, [approvedOrganizations, orgLoginId])
+  const currentOrg = useMemo(() => {
+    const savedOrg = organizations.find((org) => org.id === orgLoginId)
+    const approvedOrg = approvedOrganizations.find((org) => org.id === orgLoginId)
+    if (savedOrg && approvedOrg) return { ...savedOrg, ...approvedOrg }
+    return savedOrg || approvedOrg || null
+  }, [approvedOrganizations, organizations, orgLoginId])
   const registrationSteps = ['Basic Info', 'Registration Details', 'Representative Details', 'Address', 'Digital Presence']
 
   const updateField = (field: keyof typeof registrationForm, value: string) => setRegistrationForm((prev) => ({ ...prev, [field]: value }))
@@ -249,9 +321,15 @@ function App() {
       type: registrationForm.type || 'Company',
       country: registrationForm.country || 'India',
       email: registrationForm.email || 'admin@yourorg.com',
+      phone: registrationForm.phone || '',
+      address: registrationForm.address || '',
+      website: registrationForm.website || '',
+      domain: registrationForm.domain || '',
+      registrationType: 'GST',
       status: 'pending',
       registrationDetails: {
         registrationNumber: registrationForm.gst || '',
+        gst: registrationForm.gst || '',
       },
       representative: {
         name: registrationForm.repName || '',
@@ -407,7 +485,7 @@ function App() {
 
   const handleOrgLoginSubmit = () => {
     if (orgLoginStage === 1) {
-      const exists = approvedOrgIds.includes(orgLoginId) || approvedOrganizations.some((org) => org.id === orgLoginId)
+      const exists = approvedOrgIds.includes(orgLoginId) || approvedOrganizations.some((org) => org.id === orgLoginId) || organizations.some((org) => org.id === orgLoginId && org.status === 'approved')
       if (!exists) {
         setOrgLoginError('Organization ID not found or not yet approved.')
         return
@@ -493,55 +571,55 @@ function App() {
   const renderPlatformSidebar = () => {
     const pendingSchemas = schemas.filter(s => s.status === 'pending').length
     const pendingApps = applications.filter(a => a.status === 'pending').length
-    const pendingTotal = pendingOrganizations.length + pendingSchemas + pendingApps
 
     const navSections = [
       {
         title: null,
         items: [
-          { label: 'Dashboard', key: 'platform-dashboard' },
-          { label: 'Pending Items', key: 'platform-pending', badge: pendingTotal }
+          { label: 'Dashboard', key: 'platform-dashboard', icon: 'dashboard' },
         ]
       },
       {
         title: 'Management',
         items: [
-          { label: 'Organizations', key: 'platform-organizations', badge: pendingOrganizations.length },
-          { label: 'Applications', key: 'platform-apps', badge: pendingApps },
-          { label: 'Schema Approvals', key: 'platform-schema', badge: pendingSchemas },
+          { label: 'Organizations', key: 'platform-organizations', icon: 'organizations', badge: pendingOrganizations.length },
+          { label: 'Applications', key: 'platform-apps', icon: 'applications', badge: pendingApps },
+          { label: 'Schema Approvals', key: 'platform-schema', icon: 'schema', badge: pendingSchemas },
         ]
       },
       {
         title: 'Security',
         items: [
-          { label: 'Identity Management', key: 'platform-identity-mgmt' },
-          { label: 'Auth Monitoring', key: 'platform-auth-monitor' },
-          { label: 'Audit Logs', key: 'platform-audit' },
-          { label: 'Security Monitoring', key: 'platform-security-monitor' },
+          { label: 'Identity Management', key: 'platform-identity-mgmt', icon: 'identity' },
+          { label: 'Auth Monitoring', key: 'platform-auth-monitor', icon: 'auth' },
+          { label: 'Audit Logs', key: 'platform-audit', icon: 'audit' },
+          { label: 'Security Monitoring', key: 'platform-security-monitor', icon: 'security' },
         ]
       },
       {
         title: 'Platform',
         items: [
-          { label: 'API Management', key: 'platform-api' },
-          { label: 'Trust Management', key: 'platform-trust' },
-          { label: 'Reports', key: 'platform-reports' },
-          { label: 'Notifications', key: 'platform-notifications' },
-          { label: 'Settings', key: 'platform-settings' },
+          { label: 'API Management', key: 'platform-api', icon: 'api' },
+          { label: 'Trust Management', key: 'platform-trust', icon: 'trust' },
+          { label: 'Reports', key: 'platform-reports', icon: 'reports' },
+          { label: 'Notifications', key: 'platform-notifications', icon: 'notifications' },
         ]
       }
     ]
 
     return (
       <aside className="side-nav">
-        <div className="brand-block">Identity OS<br/><small style={{opacity:0.7}}>Platform Admin</small></div>
+        <div className="brand-block">
+          <span className="platform-brand-icon"><AdminIcon name="shield" /></span>
+          <span><strong>Identity OS</strong><small>Platform Admin</small></span>
+        </div>
         {navSections.map((section, si) => (
           <div key={si} className="nav-section">
             {section.title && <div className="nav-section-title">{section.title}</div>}
             <ul>
               {section.items.map((it) => (
                 <li key={it.key} onClick={() => setView(it.key)} className={view === it.key ? 'active' : ''}>
-                  <span>{it.label}</span>{it.badge ? <span className="nav-badge">{it.badge}</span> : null}
+                  <span className="nav-item-label"><AdminIcon name={it.icon} />{it.label}</span>{it.badge ? <span className="nav-badge">{it.badge}</span> : null}
                 </li>
               ))}
             </ul>
@@ -636,7 +714,111 @@ function App() {
     </section>
   )
 
-  const renderPlatformDashboard = () => (
+  const renderPlatformDashboard = () => {
+    const totalOrgs = organizations.length
+    const approvedCount = organizations.filter((org) => org.status === 'approved').length
+    const pendingOrgCount = pendingOrganizations.filter((org) => org.status === 'pending' || org.status === 'requires_more_info').length
+    const appCount = applications.length
+    const pendingAppCount = applications.filter((app) => app.status === 'pending').length
+    const schemaReviewCount = schemas.filter((schema) => schema.status === 'pending').length
+    const recentRows = [
+      { type: 'User', text: 'User Registered', meta: 'john.doe@technova.io', time: '09:12:34', dot: 'green' },
+      { type: 'Org', text: `${pendingOrganizations[0]?.name || 'Apex Digital'} submitted registration`, meta: pendingOrganizations[0]?.email || 'admin@apexdigital.io', time: '08:45:12', dot: 'blue' },
+      { type: 'App', text: `${applications[0]?.name || 'Identity Suite'} awaiting approval`, meta: applications[0]?.orgName || 'TechNova Solutions', time: '08:18:09', dot: 'orange' },
+    ]
+
+    return (
+      <div className="dashboard-shell platform-dashboard-shell">
+        {renderPlatformSidebar()}
+        <main className="dashboard-main platform-dashboard-main">
+          <header className="platform-topbar">
+            <h1>Dashboard</h1>
+            <button type="button" className="admin-account-pill" onClick={() => setView('home')}><AdminIcon name="shield" />Platform Admin</button>
+          </header>
+
+          <section className="platform-content">
+            <div className="admin-stats-grid">
+              <article className="admin-stat-card blue">
+                <span className="admin-stat-icon"><AdminIcon name="organizations" /></span>
+                <strong>{totalOrgs}</strong>
+                <h3>Total Orgs</h3>
+                <p>{pendingOrgCount} pending</p>
+              </article>
+              <article className="admin-stat-card green">
+                <span className="admin-stat-icon"><AdminIcon name="check" /></span>
+                <strong>{approvedCount}</strong>
+                <h3>Approved</h3>
+                <p>active orgs</p>
+              </article>
+              <article className="admin-stat-card purple">
+                <span className="admin-stat-icon"><AdminIcon name="applications" /></span>
+                <strong>{appCount}</strong>
+                <h3>Applications</h3>
+                <p>{pendingAppCount} pending</p>
+              </article>
+              <article className="admin-stat-card orange">
+                <span className="admin-stat-icon"><AdminIcon name="schema" /></span>
+                <strong>{schemaReviewCount}</strong>
+                <h3>Schema Reviews</h3>
+                <p>awaiting review</p>
+              </article>
+            </div>
+
+            <div className="admin-chart-grid">
+              <article className="admin-chart-card">
+                <h2>Organization Registrations</h2>
+                <svg className="line-chart" viewBox="0 0 520 210" role="img" aria-label="Organization registrations by month">
+                  {[0, 1, 2, 3, 4].map((row) => <line key={`h-${row}`} x1="52" y1={24 + row * 39} x2="500" y2={24 + row * 39} />)}
+                  {[0, 1, 2, 3, 4, 5].map((col) => <line key={`v-${col}`} x1={52 + col * 89.6} y1="24" x2={52 + col * 89.6} y2="180" />)}
+                  <path className="chart-fill" d="M52 150 C110 140 130 132 160 128 C220 116 235 106 270 102 C330 92 350 88 390 70 C425 55 455 64 500 82 L500 180 L52 180 Z" />
+                  <path className="line-path" d="M52 150 C110 140 130 132 160 128 C220 116 235 106 270 102 C330 92 350 88 390 70 C425 55 455 64 500 82" />
+                  {[60, 45, 30, 15, 0].map((label, index) => <text key={label} x="28" y={29 + index * 39}>{label}</text>)}
+                  {['Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug'].map((label, index) => <text key={label} x={52 + index * 89.6} y="200">{label}</text>)}
+                </svg>
+              </article>
+
+              <article className="admin-chart-card">
+                <h2>Platform Login Activity</h2>
+                <div className="bar-chart">
+                  {[
+                    ['Mon', 64],
+                    ['Tue', 82],
+                    ['Wed', 88],
+                    ['Thu', 78],
+                    ['Fri', 96],
+                    ['Sat', 42],
+                    ['Sun', 28],
+                  ].map(([day, value]) => (
+                    <div className="bar-column" key={day}>
+                      <span style={{ height: `${value}%` }} />
+                      <label>{day}</label>
+                    </div>
+                  ))}
+                </div>
+              </article>
+            </div>
+
+            <section className="recent-activity-card">
+              <h2>Recent Activity</h2>
+              <div className="recent-activity-list">
+                {recentRows.map((row) => (
+                  <div className="recent-activity-row" key={`${row.text}-${row.time}`}>
+                    <span className={`activity-dot ${row.dot}`} />
+                    <span className="activity-type">{row.type}</span>
+                    <strong>{row.text}</strong>
+                    <span className="activity-meta">{row.meta}</span>
+                    <time>{row.time}</time>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </section>
+        </main>
+      </div>
+    )
+  }
+
+  const _renderPlatformDashboardOld = () => (
     <div className="dashboard-shell">
       {renderPlatformSidebar()}
       <main className="dashboard-main">
@@ -993,9 +1175,98 @@ function App() {
   // expose registration builder view mapping
   // when view === 'org-registration-builder', render the component
   
+  const handleOrgMenuClick = (item: string) => {
+    if (item === 'Dashboard') setView('organization-dashboard')
+    if (item === 'Organization Profile') setView('org-profile')
+    if (item === 'Registration Builder') setView('org-registration-builder')
+    if (item === 'Login Configuration') setView('org-login-builder')
+    if (item === 'Applications') setView('org-applications')
+  }
+
+  const renderOrgSidebar = (activeItem: string) => {
+    const org = currentOrg || approvedOrganizations[0]
+    return (
+      <aside className="org-sidebar org-admin-sidebar">
+        <div className="org-sidebar-brand">
+          <span className="platform-brand-icon"><AdminIcon name="shield" /></span>
+          <span><strong>{org?.name || 'Organization'}</strong><small>{org?.id || orgLoginId}</small></span>
+        </div>
+        <nav>
+          {orgAdminMenu.map((item) => (
+            <button type="button" key={item} className={`menu-item ${item === activeItem ? 'active' : ''}`} onClick={() => handleOrgMenuClick(item)}>
+              <span className="nav-item-label"><AdminIcon name={item === 'Organization Profile' ? 'organizations' : item === 'Applications' ? 'applications' : item === 'Registration Builder' ? 'schema' : item === 'Login Configuration' ? 'auth' : item === 'Audit Logs' ? 'audit' : item === 'API Credentials' ? 'api' : item === 'Identity Management' || item === 'Users' ? 'identity' : item === 'Webhooks' ? 'trust' : 'dashboard'} />{item}</span>
+            </button>
+          ))}
+        </nav>
+      </aside>
+    )
+  }
+
+  const renderOrgProfile = () => {
+    const org = currentOrg || approvedOrganizations[0]
+    const representative = org?.representative
+    const registrationNumber = org?.registrationDetails?.gst || org?.registrationDetails?.registrationNumber || '-'
+    const initials = (representative?.name || org?.name || 'Org').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()
+
+    return (
+      <div className="org-dashboard-shell org-profile-shell">
+        {renderOrgSidebar('Organization Profile')}
+        <main className="org-main org-profile-main">
+          <header className="org-profile-topbar">
+            <h1>Organization Profile</h1>
+            <div className="org-user-chip"><span>{initials}</span>{representative?.name || 'Organization Admin'}</div>
+          </header>
+
+          <section className="org-profile-content">
+            <article className="org-profile-card org-profile-summary">
+              <div className="org-profile-hero">
+                <span className="org-profile-logo"><AdminIcon name="organizations" /></span>
+                <div>
+                  <h2>{org?.name || '-'}</h2>
+                  <div className="org-profile-badges">
+                    <span>{org?.type || '-'}</span>
+                    <span className="approved">Approved</span>
+                  </div>
+                  <code>{org?.id || orgLoginId}</code>
+                </div>
+              </div>
+
+              <div className="org-profile-details-grid">
+                <ProfileField label="Organization ID" value={org?.id || orgLoginId} mono />
+                <ProfileField label="Name" value={org?.name} />
+                <ProfileField label="Type" value={org?.type} />
+                <ProfileField label="Country" value={org?.country} />
+                <ProfileField label="Official Email" value={org?.email} />
+                <ProfileField label="Phone" value={org?.phone} />
+                <ProfileField label="Registration Type" value={org?.registrationType || (org?.registrationDetails?.gst ? 'GST' : '-')} />
+                <ProfileField label="Registration Number" value={registrationNumber} />
+              </div>
+            </article>
+
+            <div className="org-profile-lower-grid">
+              <article className="org-profile-card">
+                <h3>Representative</h3>
+                <ProfileField label="Name" value={representative?.name} />
+                <ProfileField label="Email" value={representative?.email} />
+                <ProfileField label="Mobile" value={representative?.mobile} />
+                <ProfileField label="Designation" value={representative?.designation} />
+              </article>
+
+              <article className="org-profile-card">
+                <h3>Address</h3>
+                <p className="org-profile-address">{org?.address || '-'}</p>
+                <ProfileField label="Website" value={org?.website || org?.domain} link />
+              </article>
+            </div>
+          </section>
+        </main>
+      </div>
+    )
+  }
+
   const renderOrgAdminDashboard = () => (
     <div className="org-dashboard-shell">
-      <aside className="org-sidebar"><div className="sidebar-header">Identity OS</div><nav>{orgAdminMenu.map((item) => <button type="button" key={item} className={`menu-item ${item === 'Dashboard' ? 'active' : ''}`} onClick={() => { if (item === 'Registration Builder') { setView('org-registration-builder') } else if (item === 'Login Configuration') { setView('org-login-builder') } else if (item === 'Applications') { setView('org-applications') } }}>{item}</button>)}</nav></aside>
+      {renderOrgSidebar('Dashboard')}
       <main className="org-main">
         <header className="org-main-header"><div><div className="eyebrow">Organization Admin</div><h2>{currentOrg?.name || 'TechNova Solutions'} Overview</h2></div><div style={{display:'flex',gap:12}}><button type="button" className="secondary-button" onClick={() => setView('home')}>Sign Out</button><button type="button" className="primary-button" onClick={() => setView('org-registration-builder')}>Open Registration Builder</button></div></header>        <section className="kpi-grid">
           <div className="kpi-card"><strong>{100 + (applications.length || 0)}</strong><span>Total Users</span></div>
@@ -1015,7 +1286,7 @@ function App() {
     const orgApps = applications.filter(a => a.orgId === orgId)
     return (
       <div className="org-dashboard-shell">
-        <aside className="org-sidebar"><div className="sidebar-header">Identity OS</div><nav>{orgAdminMenu.map((item) => <button type="button" key={item} className={`menu-item ${item === 'Applications' ? 'active' : ''}`} onClick={() => { if (item === 'Registration Builder') { setView('org-registration-builder') } else if (item === 'Login Configuration') { setView('org-login-builder') } else if (item === 'Applications') { setView('org-applications') } }}>{item}</button>)}</nav></aside>
+        {renderOrgSidebar('Applications')}
         <main className="org-main">
           <header className="org-main-header"><div><div className="eyebrow">Organization Admin</div><h2>Applications — {currentOrg?.name || orgId}</h2><div className="subtle">Manage applications registered by your organization. Submit new apps for platform approval.</div></div><div style={{display:'flex',gap:12}}><button type="button" className="secondary-button" onClick={() => setView('organization-dashboard')}>Back</button><button type="button" className="primary-button" onClick={() => setRegisterAppModal(true)}>Register Application</button></div></header>
           <div className="panel-copy"><p>Manage your applications and submit new applications to the platform for approval.</p></div>
@@ -1426,6 +1697,7 @@ function App() {
       {view === 'org-registration-builder' && <RegistrationBuilder />}
       {view === 'org-login-builder' && <LoginBuilder />}
       {view === 'org-applications' && renderOrgApplications && renderOrgApplications()}
+      {view === 'org-profile' && renderOrgProfile()}
       {view === 'organization-dashboard' && renderOrgAdminDashboard()}
 
       {/* global modals */}
