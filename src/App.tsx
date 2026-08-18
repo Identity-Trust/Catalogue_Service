@@ -1287,7 +1287,7 @@ function App() {
     return (
       <div className="org-dashboard-shell">
         {renderOrgSidebar('Applications')}
-        <main className="org-main">
+        <main className="org-main org-applications-main">
           <header className="org-main-header"><div><div className="eyebrow">Organization Admin</div><h2>Applications — {currentOrg?.name || orgId}</h2><div className="subtle">Manage applications registered by your organization. Submit new apps for platform approval.</div></div><div style={{display:'flex',gap:12}}><button type="button" className="secondary-button" onClick={() => setView('organization-dashboard')}>Back</button><button type="button" className="primary-button" onClick={() => setRegisterAppModal(true)}>Register Application</button></div></header>
           <div className="panel-copy"><p>Manage your applications and submit new applications to the platform for approval.</p></div>
           <section style={{padding:12}}>
@@ -1325,13 +1325,13 @@ function App() {
               <div className="modal-header"><h3>Register Application</h3><button className="close-button" onClick={() => setRegisterAppModal(false)}>×</button></div>
               <div className="form-card">
                 <div className="register-form-grid">
-                  <label className="full">Application Name<input value={registerAppForm.name} onChange={(e) => setRegisterAppForm(prev => ({ ...prev, name: e.target.value }))} /></label>
+                  <label className="full">Application Name<input value={registerAppForm.name} onChange={(e) => setRegisterAppForm(prev => ({ ...prev, name: e.target.value }))} placeholder="Identity Suite" /></label>
                   <label>Type<select value={registerAppForm.type} onChange={(e) => setRegisterAppForm(prev => ({ ...prev, type: e.target.value }))}><option value="web">Web</option><option value="mobile">Mobile</option><option value="spa">Single Page App</option><option value="backend">Backend</option></select></label>
-                  <label>Contact Email<input value={registerAppForm.contactEmail} onChange={(e) => setRegisterAppForm(prev => ({ ...prev, contactEmail: e.target.value }))} /></label>
-                  <label>Domain<input value={registerAppForm.domain} onChange={(e) => setRegisterAppForm(prev => ({ ...prev, domain: e.target.value }))} /></label>
-                  <label className="full">Description<textarea value={registerAppForm.description} onChange={(e) => setRegisterAppForm(prev => ({ ...prev, description: e.target.value }))} /></label>
-                  <label>Redirect URI<input value={registerAppForm.redirectUri} onChange={(e) => setRegisterAppForm(prev => ({ ...prev, redirectUri: e.target.value }))} /></label>
-                  <label>Logout URI<input value={registerAppForm.logoutUri} onChange={(e) => setRegisterAppForm(prev => ({ ...prev, logoutUri: e.target.value }))} /></label>
+                  <label>Contact Email<input value={registerAppForm.contactEmail} onChange={(e) => setRegisterAppForm(prev => ({ ...prev, contactEmail: e.target.value }))} placeholder="owner@company.com" /></label>
+                  <label>Domain<input value={registerAppForm.domain} onChange={(e) => setRegisterAppForm(prev => ({ ...prev, domain: e.target.value }))} placeholder="app.company.com" /></label>
+                  <label className="full">Description<textarea value={registerAppForm.description} onChange={(e) => setRegisterAppForm(prev => ({ ...prev, description: e.target.value }))} placeholder="Describe what this application does" /></label>
+                  <label>Redirect URI<input value={registerAppForm.redirectUri} onChange={(e) => setRegisterAppForm(prev => ({ ...prev, redirectUri: e.target.value }))} placeholder="https://app.company.com/callback" /></label>
+                  <label>Logout URI<input value={registerAppForm.logoutUri} onChange={(e) => setRegisterAppForm(prev => ({ ...prev, logoutUri: e.target.value }))} placeholder="https://app.company.com/logout" /></label>
                 </div>
                 <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:12}}>
                   <button className="secondary-button" onClick={() => setRegisterAppModal(false)}>Cancel</button>
