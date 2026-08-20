@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import '../src/index.css'
-import '../src/App.css'
+import '../src/styles/catalogue.css'
 import KeycloakProvider from '../src/components/KeycloakProvider'
 
 export const metadata: Metadata = {
