@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import '../src/index.css'
 import '../src/App.css'
+import KeycloakProvider from '../src/components/KeycloakProvider'
 
 export const metadata: Metadata = {
   title: 'Catalogue Service',
@@ -14,7 +15,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <KeycloakProvider>
+          {children}
+        </KeycloakProvider>
+      </body>
     </html>
   )
 }
