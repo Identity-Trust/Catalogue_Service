@@ -14,7 +14,7 @@ export default function RegistrationSuccessPage() {
         <div className="org-id-box"><span>Organization ID</span><strong>{successData?.orgId}</strong><small>Save this ID - you will need it to log in as Organization Admin</small></div>
         <div className="meta-row"><div><label>Created</label><p>{successData?.createdAt}</p></div><div><label>Status</label><p>{successData?.status}</p></div></div>
       </div>
-      <div className="success-actions"><button type="button" className="secondary-button" onClick={() => setView('home')}>Back to Home</button><button type="button" className="primary-button" onClick={() => setView('platform')}>Open Admin Portal</button></div>
+      <div className="success-actions"><button type="button" className="secondary-button" onClick={() => setView('home')}>Back to Home</button><button type="button" className="secondary-button" onClick={() => setView('platform')}>Platform Admin Portal</button><button type="button" className="primary-button" onClick={() => setView('organization')}>Organization Admin Login</button></div>
     </section>
   )
 }

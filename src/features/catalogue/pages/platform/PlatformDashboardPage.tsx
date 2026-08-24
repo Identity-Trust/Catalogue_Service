@@ -1,11 +1,20 @@
 'use client'
 
 import { AdminIcon } from '../../../../components/ui'
+import { logoutFromKeycloak } from '../../../../lib/keycloak'
 import PlatformSidebar from '../../components/PlatformSidebar'
 import { useCatalogue } from '../../context/CatalogueContext'
 
 export default function PlatformDashboardPage() {
   const { applications, organizations, pendingOrganizations, schemas, setView, view } = useCatalogue()
+  const handleLogout = async () => {
+    try {
+      await logoutFromKeycloak()
+    } catch (error) {
+      console.error('Platform Admin logout failed:', error)
+      setView('home')
+    }
+  }
   const totalOrgs = organizations.length
   const approvedCount = organizations.filter((org) => org.status === 'approved').length
   const pendingOrgCount = pendingOrganizations.filter((org) => org.status === 'pending' || org.status === 'requires_more_info').length
@@ -21,7 +30,7 @@ export default function PlatformDashboardPage() {
     <div className="dashboard-shell platform-dashboard-shell">
       <PlatformSidebar applications={applications} currentView={view} onNavigate={setView} pendingOrganizations={pendingOrganizations} schemas={schemas} />
       <main className="dashboard-main platform-dashboard-main">
-        <header className="platform-topbar"><h1>Dashboard</h1><button type="button" className="admin-account-pill" onClick={() => setView('home')}><AdminIcon name="shield" />Platform Admin</button></header>
+        <header className="platform-topbar"><h1>Dashboard</h1><button type="button" className="admin-account-pill" onClick={handleLogout}><AdminIcon name="shield" />Platform Admin</button></header>
         <section className="platform-content">
           <div className="admin-stats-grid">
             <article className="admin-stat-card blue"><span className="admin-stat-icon"><AdminIcon name="organizations" /></span><strong>{totalOrgs}</strong><h3>Total Orgs</h3><p>{pendingOrgCount} pending</p></article>

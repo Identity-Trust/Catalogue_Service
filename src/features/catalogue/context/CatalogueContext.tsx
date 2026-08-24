@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { approvedOrgIds, approvedSeedOrganizations, initialApplications, initialPendingOrganizations, initialSchemas } from '../../../data/mockCatalogueData'
+import keycloak from '../../../lib/keycloak'
 import type { ApplicationRecord, AppCredentialModal, ApprovalModal, AuditLog, ConfirmModal, CredentialModal, LoginPolicy, Organization, RequestModal, SavedState, SchemaRecord } from '../../../types/catalogue'
 import { readStorage, writeStorage } from '../../../utils/storage'
 import { getCatalogueRoute, type CatalogueView } from '../routes'
@@ -82,6 +83,8 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
   const [orgOtp, setOrgOtp] = useState('')
   const [orgLoginError, setOrgLoginError] = useState('')
   const [successData, setSuccessData] = useState<{ orgId: string; createdAt: string; status: string } | null>(null)
+  const [registrationError, setRegistrationError] = useState('')
+  const [registrationSubmitting, setRegistrationSubmitting] = useState(false)
   const [requestModal, setRequestModal] = useState<RequestModal | null>(null)
   const [orgCredentialModal, setOrgCredentialModal] = useState<CredentialModal | null>(null)
   const [appCredentialModal, setAppCredentialModal] = useState<AppCredentialModal | null>(null)
@@ -111,31 +114,44 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
   const nextStep = () => setStep((prev) => Math.min(prev + 1, registrationSteps.length - 1))
   const previousStep = () => setStep((prev) => Math.max(prev - 1, 0))
 
-  const submitRegistration = () => {
-    const generatedId = `org_${Math.random().toString(36).slice(2, 10)}`
-    const newOrg: Organization = {
-      id: generatedId,
-      name: registrationForm.name || 'New Org',
-      type: registrationForm.type || 'Company',
-      country: registrationForm.country || 'India',
-      email: registrationForm.email || 'admin@yourorg.com',
-      phone: registrationForm.phone || '',
-      address: registrationForm.address || '',
-      website: registrationForm.website || '',
-      domain: registrationForm.domain || '',
-      registrationType: 'GST',
-      status: 'pending',
-      registrationDetails: { registrationNumber: registrationForm.gst || '', gst: registrationForm.gst || '' },
-      representative: { name: registrationForm.repName || '', email: registrationForm.repEmail || '', mobile: registrationForm.repMobile || '', designation: registrationForm.designation || '' },
-      documents: [],
-      submittedAt: new Date().toLocaleString(),
+  const submitRegistration = async () => {
+    setRegistrationSubmitting(true)
+    setRegistrationError('')
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080'}/api/v1/onboarding/organizations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organizationName: registrationForm.name,
+          organizationType: registrationForm.type,
+          countryCode: registrationForm.country,
+          officialEmail: registrationForm.email,
+          officialPhone: registrationForm.phone,
+          registrationNumber: registrationForm.gst,
+          verificationIdType: 'GST',
+          verificationId: registrationForm.gst,
+          verificationIdVerifyStatus: 'PENDING',
+          websiteUrl: registrationForm.website,
+          logoUrl: registrationForm.logo,
+          representativeName: registrationForm.repName,
+          representativeEmail: registrationForm.repEmail,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.message || 'Registration failed.')
+
+      setSuccessData({
+        orgId: data.organizationId,
+        createdAt: new Date().toLocaleString(),
+        status: 'Awaiting platform approval',
+      })
+      setView('success')
+      setStep(0)
+    } catch (error) {
+      setRegistrationError(error instanceof Error ? error.message : 'Registration failed. Please try again.')
+    } finally {
+      setRegistrationSubmitting(false)
     }
-    setOrganizations((prev) => [newOrg, ...prev])
-    setPendingOrganizations((prev) => [newOrg, ...prev])
-    setApplications((prev) => [{ id: `app-${Date.now()}`, orgId: generatedId, orgName: newOrg.name, name: `${newOrg.name} IAM Portal`, type: 'web', status: 'pending' }, ...prev])
-    setSuccessData({ orgId: generatedId, createdAt: new Date().toLocaleString(), status: 'Awaiting admin approval' })
-    setView('success')
-    setStep(0)
   }
 
   const handlePlatformLogin = () => {
@@ -220,28 +236,60 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
     setApprovedOrganizations((prev) => prev.map((item) => item.id === org.id ? { ...item, status: 'approved', resumedAt: new Date().toLocaleString() } : item))
   }
 
-  const handleOrgLoginSubmit = () => {
+  const handleOrgLoginSubmit = async () => {
     if (orgLoginStage === 1) {
-      const exists = approvedOrgIds.includes(orgLoginId) || approvedOrganizations.some((org) => org.id === orgLoginId) || organizations.some((org) => org.id === orgLoginId && org.status === 'approved')
-      if (!exists) {
-        setOrgLoginError('Organization ID not found or not yet approved.')
-        return
+      try {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080'}/api/v1/auth/organization/${encodeURIComponent(orgLoginId)}/status`)
+        const data = await response.json()
+        if (!response.ok || !data.success) {
+          setOrgLoginError(data.message || 'Organization ID not found or not yet approved.')
+          return
+        }
+        setOrgLoginError('')
+        setOrgLoginStage(2)
+      } catch {
+        setOrgLoginError('Unable to check organization status. Please try again.')
       }
-      setOrgLoginError('')
-      setOrgLoginStage(2)
       return
     }
     if (orgLoginStage === 2) {
-      setOrgLoginStage(3)
+      try {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080'}/api/v1/auth/organization/otp/request`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ organizationId: orgLoginId }),
+        })
+        const data = await response.json()
+        if (!response.ok || !data.success) {
+          setOrgLoginError(data.message || 'Unable to send OTP.')
+          return
+        }
+        setOrgLoginError('')
+        setOrgLoginStage(3)
+      } catch {
+        setOrgLoginError('Unable to send OTP. Please try again.')
+      }
+      return
+    }
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080'}/api/v1/auth/organization/otp/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId: orgLoginId, otp: orgOtp }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        setOrgLoginError(data.message || 'Invalid OTP.')
+        return
+      }
       setOrgLoginError('')
-      return
+      await keycloak.login({
+        loginHint: orgLoginId,
+        redirectUri: `${window.location.origin}/organization/dashboard`,
+      })
+    } catch {
+      setOrgLoginError('Unable to start Keycloak login. Please try again.')
     }
-    if (orgOtp === '000000') {
-      setOrgLoginError('Invalid OTP. Please enter a valid 6-digit code.')
-      return
-    }
-    setOrgLoginError('')
-    setView('organization-dashboard')
   }
 
   useEffect(() => {
@@ -265,7 +313,7 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
       setAppSearch, setConfirmModal, setConfirmProcessing, setLoginPublishModal, setOrgApprovalModal, setOrgCredentialModal,
       setOrgLoginChannel, setOrgLoginId, setOrgOtp, setOrgsFilter, setPlatformLogin, setPolicyPreviewModal, setPublishModal,
       setRegisterAppForm, setRegisterAppModal, setRequestModal, setSchemaFilterStatus, setSchemas, setSchemaSearch, setSchemaTab,
-      setOrganizations, setView, step, submitRegistration, successData, suspendOrganization, unsuspendOrganization, updateRegistrationField, view,
+      registrationError, registrationSubmitting, setOrganizations, setView, step, submitRegistration, successData, suspendOrganization, unsuspendOrganization, updateRegistrationField, view,
     }}>
       {children}
     </CatalogueContext.Provider>

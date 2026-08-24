@@ -23,7 +23,7 @@ function RegistrationStep() {
 }
 
 export default function RegistrationPage() {
-  const { nextStep, previousStep, registrationSteps, setView, step, submitRegistration } = useCatalogue()
+  const { nextStep, previousStep, registrationError, registrationSteps, registrationSubmitting, setView, step, submitRegistration } = useCatalogue()
   return (
     <section className="panel-page">
       <PageHeader title="Identity OS - Organization Registration" onBack={() => setView('home')} />
@@ -31,7 +31,7 @@ export default function RegistrationPage() {
       <div className="panel-copy"><h2>Step {step + 1} of {registrationSteps.length}: {registrationSteps[step]}</h2><p>{step === 0 && 'Provide your organization basic details'}{step === 1 && 'Add your registration details'}{step === 2 && 'Provide your representative information'}{step === 3 && 'Add your office address'}{step === 4 && 'Add your digital presence and branding'}</p></div>
       <div className="form-card">
         <RegistrationStep />
-        <div className="form-actions"><button type="button" className="secondary-button" onClick={() => setView('home')}>Cancel</button><div className="form-actions-right">{step > 0 && <button type="button" className="secondary-button" onClick={previousStep}>Previous</button>}{step < registrationSteps.length - 1 ? <button type="button" className="primary-button" onClick={nextStep}>Next</button> : <button type="button" className="primary-button" onClick={submitRegistration}>Submit</button>}</div></div>
+        {registrationError && <div className="error-message">{registrationError}</div>}<div className="form-actions"><button type="button" className="secondary-button" onClick={() => setView('home')}>Cancel</button><div className="form-actions-right">{step > 0 && <button type="button" className="secondary-button" onClick={previousStep}>Previous</button>}{step < registrationSteps.length - 1 ? <button type="button" className="primary-button" onClick={nextStep}>Next</button> : <button type="button" className="primary-button" onClick={submitRegistration} disabled={registrationSubmitting}>{registrationSubmitting ? 'Submitting...' : 'Submit'}</button>}</div></div>
       </div>
     </section>
   )

@@ -6,4 +6,10 @@ const keycloak = new Keycloak({
   clientId: "identity-os-frontend",
 });
 
+export async function logoutFromKeycloak() {
+  await keycloak.logout({
+    redirectUri: `${window.location.origin}/`,
+  });
+}
+
 export default keycloak;
