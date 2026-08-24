@@ -1085,6 +1085,10 @@ textarea {
   border-radius: 14px;
   box-shadow: 0 8px 20px rgba(2,6,23,0.35);
 }
+
+.approval-card > div:first-child {
+  min-width: 0;
+}
 .app-status-badge {
   display: inline-block;
   padding: 6px 10px;
@@ -1100,16 +1104,21 @@ textarea {
 .approval-name {
   font-size: 1.14rem;
   font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .approval-meta {
   color: rgba(216, 226, 245, 0.75);
   margin-top: 6px;
+  overflow-wrap: anywhere;
 }
 
 .approval-actions {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  flex: 0 0 auto;
 }
 
 .modal-backdrop {
@@ -1120,10 +1129,13 @@ textarea {
   align-items: center;
   justify-content: center;
   padding: 24px;
+  z-index: 50;
 }
 
 .modal-card {
   width: min(540px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
   background: #0d172b;
   border: 1px solid rgba(148, 163, 184, 0.24);
   border-radius: 20px;
@@ -1143,11 +1155,17 @@ textarea {
 }
 
 .close-button {
-  background: transparent;
+  width: 38px;
+  height: 38px;
+  display: inline-grid;
+  place-items: center;
+  background: rgba(15, 23, 42, 0.72);
   color: white;
-  border: none;
-  font-size: 2rem;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 10px;
+  font-size: 1.25rem;
   line-height: 1;
+  flex: 0 0 auto;
 }
 
 .review-block {
@@ -1165,6 +1183,7 @@ textarea {
 .review-block p {
   margin: 8px 0 0;
   color: #edf6ff;
+  overflow-wrap: anywhere;
 }
 
 .modal-actions {
@@ -1211,6 +1230,25 @@ textarea {
   grid-template-columns: 257px minmax(0, 1fr);
   background: #edf2f8;
   color: #0c1c37;
+}
+
+.org-dashboard-shell:has(.org-admin-sidebar) .org-main {
+  min-width: 0;
+  background: #edf2f8;
+  color: #0b1d38;
+}
+
+.org-dashboard-shell:has(.org-admin-sidebar) .org-main-header h2 {
+  color: #071a37;
+}
+
+.org-dashboard-shell:has(.org-admin-sidebar) .org-main-header .eyebrow {
+  color: #2563eb;
+}
+
+.org-dashboard-shell:has(.org-admin-sidebar) .org-main-header {
+  align-items: flex-start;
+  flex-wrap: wrap;
 }
 
 .org-admin-sidebar {
@@ -1460,21 +1498,23 @@ textarea {
 
 .kpi-card {
   padding: 18px 14px;
-  background: rgba(12, 18, 30, 0.9);
-  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: #ffffff;
+  border: 1px solid #dce4ef;
   border-radius: 18px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
 }
 
 .kpi-card strong {
   font-size: 2rem;
   letter-spacing: -0.05em;
+  color: #0b1d38;
 }
 
 .kpi-card span {
-  color: rgba(214, 224, 252, 0.76);
+  color: #475569;
 }
 
 .chart-grid {
@@ -1485,10 +1525,11 @@ textarea {
 
 .chart-card {
   padding: 18px;
-  background: rgba(12, 18, 30, 0.9);
-  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: #ffffff;
+  border: 1px solid #dce4ef;
   border-radius: 18px;
   min-height: 200px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
 }
 
 .chart-card.large {
@@ -1502,6 +1543,7 @@ textarea {
 .chart-card h4 {
   margin: 0 0 18px;
   font-size: 1rem;
+  color: #13233f;
 }
 
 .chart-bars {
@@ -1539,21 +1581,21 @@ textarea {
   position: absolute;
   inset: 24px;
   border-radius: 50%;
-  background: #0d172b;
+  background: #ffffff;
 }
 
 .mini-list,
 .activity-list {
   margin: 0;
   padding-left: 18px;
-  color: rgba(226, 232, 240, 0.82);
+  color: #334155;
   display: grid;
   gap: 8px;
 }
 
 .builder-grid {
   display: grid;
-  grid-template-columns: 220px 1fr 320px;
+  grid-template-columns: minmax(190px, 220px) minmax(340px, 1fr) minmax(280px, 320px);
   gap: 18px;
   margin-top: 18px;
 }
@@ -1602,6 +1644,7 @@ textarea {
   color: #dff4ff;
   border: 1px solid rgba(255,255,255,0.03);
   margin-left:8px;
+  white-space: nowrap;
 }
 
 .builder-preview .field-row .drag-handle { flex: 0 0 auto; }
@@ -1654,6 +1697,7 @@ textarea {
   gap: 12px;
   align-items: flex-start;
   flex: 1;
+  min-width: 0;
 }
 
 .app-icon {
@@ -1676,9 +1720,9 @@ textarea {
 
 .app-desc { margin-top:8px; color: rgba(226,232,240,0.8); }
 
-.app-meta-row { display:flex; gap:10px; align-items:center; margin-top:10px; }
+.app-meta-row { display:flex; gap:10px; align-items:center; margin-top:10px; flex-wrap: wrap; }
 
-.org-app-actions { display:flex; flex-direction:column; gap:8px; min-width:160px; align-items:flex-end }
+.org-app-actions { display:flex; flex-direction:column; gap:8px; min-width:160px; align-items:flex-end; flex: 0 0 auto; }
 
 .org-applications-main {
   background: #edf2f8;
@@ -1788,6 +1832,35 @@ textarea {
 
 .subtle { color: rgba(210,223,240,0.7); font-size:0.95rem; margin-top:6px; }
 
+.dashboard-main {
+  min-width: 0;
+}
+
+.dashboard-main .page-header,
+.dashboard-main .dashboard-header,
+.dashboard-main .panel-copy,
+.dashboard-main .tab-row,
+.dashboard-main .approval-list {
+  min-width: 0;
+}
+
+.dashboard-header {
+  flex-wrap: wrap;
+}
+
+.dashboard-header h2 {
+  color: #f8fbff;
+}
+
+.dashboard-header > div:first-child,
+.org-main-header > div:first-child {
+  min-width: 0;
+}
+
+.page-title {
+  overflow-wrap: anywhere;
+}
+
 /* Make builder panels visually closer to Figma layout */
 .builder-palette .form-card,
 .builder-preview.form-card,
@@ -1871,5 +1944,40 @@ textarea {
 
   .builder-grid {
     grid-template-columns: 1fr;
+  }
+
+  .dashboard-main,
+  .org-main,
+  .platform-content {
+    padding: 20px 16px;
+  }
+
+  .approval-card,
+  .org-app-card,
+  .recent-activity-row {
+    align-items: stretch;
+  }
+
+  .approval-card,
+  .org-app-card {
+    flex-direction: column;
+  }
+
+  .approval-actions,
+  .org-app-actions,
+  .success-actions,
+  .form-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .recent-activity-row {
+    grid-template-columns: 10px minmax(0, 1fr);
+  }
+
+  .activity-type,
+  .activity-meta,
+  .recent-activity-row time {
+    grid-column: 2;
   }
 }
