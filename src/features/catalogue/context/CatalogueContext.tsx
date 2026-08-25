@@ -10,6 +10,20 @@ import { getCatalogueRoute, type CatalogueView } from '../routes'
 
 const registrationSteps = ['Basic Info', 'Registration Details', 'Representative Details', 'Address', 'Digital Presence']
 
+const requiredRegistrationFields: Array<{ key: string; label: string }> = [
+  { key: 'name', label: 'Organization name' },
+  { key: 'type', label: 'Organization type' },
+  { key: 'country', label: 'Country' },
+  { key: 'email', label: 'Official email' },
+  { key: 'gst', label: 'Registration number' },
+  { key: 'repName', label: 'Representative name' },
+  { key: 'repEmail', label: 'Representative email' },
+  { key: 'address', label: 'Address line 1' },
+  { key: 'city', label: 'City' },
+  { key: 'state', label: 'State' },
+  { key: 'postalCode', label: 'Postal code' },
+]
+
 const loadSaved = () => {
   try {
     const raw = readStorage('catalogue_state_v1')
@@ -41,7 +55,7 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
   const [view, setCurrentView] = useState<CatalogueView>(initialView)
   const [step, setStep] = useState(0)
   const [registrationForm, setRegistrationForm] = useState({
-    name: '', type: '', country: '', email: '', phone: '', gst: '', repName: '', repEmail: '', repMobile: '', designation: '', address: '', website: '', domain: '', logo: '',
+    name: '', type: '', country: '', email: '', phone: '', gst: '', repName: '', repEmail: '', repMobile: '', designation: '', empId: '', address: '', addressLine2: '', city: '', district: '', state: '', postalCode: '', addressProofRef: '', website: '', domain: '', logo: '',
   })
   const [platformLogin, setPlatformLogin] = useState({ username: '', password: '' })
   const [platformLoginError, setPlatformLoginError] = useState('')
@@ -82,7 +96,17 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
   const [orgLoginChannel, setOrgLoginChannel] = useState('email')
   const [orgOtp, setOrgOtp] = useState('')
   const [orgLoginError, setOrgLoginError] = useState('')
-  const [successData, setSuccessData] = useState<{ orgId: string; createdAt: string; status: string } | null>(null)
+  const [orgLoginMaskedEmail, setOrgLoginMaskedEmail] = useState('')
+  const [authenticatedOrgId, setAuthenticatedOrgId] = useState('')
+  const [authenticatedOrgProfile, setAuthenticatedOrgProfile] = useState<Organization | null>(null)
+  const [successData, setSuccessData] = useState<{ orgId: string; createdAt: string; status: string; officialEmail?: string } | null>(() => {
+    try {
+      const raw = readStorage('catalogue_last_registration_v1')
+      return raw ? JSON.parse(raw) : null
+    } catch {
+      return null
+    }
+  })
   const [registrationError, setRegistrationError] = useState('')
   const [registrationSubmitting, setRegistrationSubmitting] = useState(false)
   const [requestModal, setRequestModal] = useState<RequestModal | null>(null)
@@ -101,20 +125,94 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
   }
 
   const currentOrg = useMemo(() => {
-    const savedOrg = organizations.find((org) => org.id === orgLoginId)
-    const approvedOrg = approvedOrganizations.find((org) => org.id === orgLoginId)
+    if (authenticatedOrgProfile) return authenticatedOrgProfile
+    const effectiveOrgId = authenticatedOrgId || orgLoginId
+    if (!effectiveOrgId) return null
+    const savedOrg = organizations.find((org) => org.id === effectiveOrgId)
+    const approvedOrg = approvedOrganizations.find((org) => org.id === effectiveOrgId)
     return savedOrg && approvedOrg ? { ...savedOrg, ...approvedOrg } : savedOrg || approvedOrg || null
-  }, [approvedOrganizations, organizations, orgLoginId])
+  }, [authenticatedOrgId, authenticatedOrgProfile, approvedOrganizations, organizations, orgLoginId])
+
+  const mapOrganizationProfile = (profile: any): Organization => ({
+    id: profile.organizationId,
+    name: profile.organizationName,
+    type: profile.organizationType,
+    country: profile.countryCode,
+    email: profile.officialEmail,
+    phone: profile.officialPhone,
+    website: profile.websiteUrl,
+    status: profile.approvalStatus || profile.status || 'ACTIVE',
+    registrationType: profile.verificationIdType,
+    registrationDetails: {
+      registrationNumber: profile.registrationNumber || profile.verificationId || '',
+      gst: profile.verificationId,
+    },
+  })
+
+  useEffect(() => {
+    const tokenOrgId = keycloak.tokenParsed?.organization_id as string | undefined
+    const username = keycloak.tokenParsed?.preferred_username as string | undefined
+    const nextOrgId = tokenOrgId || (keycloak.hasRealmRole?.('ORGANISATION_ADMIN') ? username : '')
+    if (!keycloak.authenticated || !nextOrgId) return
+
+    setAuthenticatedOrgId(nextOrgId)
+    setOrgLoginId(nextOrgId)
+
+    const loadProfile = async () => {
+      try {
+        await keycloak.updateToken(30)
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080'}/api/v1/onboarding/organizations/${encodeURIComponent(nextOrgId)}`, {
+          headers: {
+            Authorization: `Bearer ${keycloak.token}`,
+          },
+        })
+        if (!response.ok) return
+        const profile = await response.json()
+        setAuthenticatedOrgProfile(mapOrganizationProfile(profile))
+      } catch {
+        // Keep the token organization id even when the profile endpoint is temporarily unavailable.
+      }
+    }
+
+    loadProfile()
+  }, [])
 
   const addAudit = (action: string, details: string) => {
     setAuditLogs((prev) => [{ id: `audit_${Date.now()}`, action, details, timestamp: new Date().toLocaleString() }, ...prev])
   }
 
   const updateRegistrationField = (field: keyof typeof registrationForm, value: string) => setRegistrationForm((prev) => ({ ...prev, [field]: value }))
-  const nextStep = () => setStep((prev) => Math.min(prev + 1, registrationSteps.length - 1))
+  const validateRegistrationStep = (targetStep = step) => {
+    const stepFields: Record<number, string[]> = {
+      0: ['name', 'type', 'country', 'email'],
+      1: ['gst'],
+      2: ['repName', 'repEmail'],
+      3: ['address', 'city', 'state', 'postalCode'],
+    }
+    const missing = (stepFields[targetStep] || [])
+      .map((key) => requiredRegistrationFields.find((field) => field.key === key))
+      .filter((field): field is { key: string; label: string } => Boolean(field))
+      .find((field) => !String(registrationForm[field.key as keyof typeof registrationForm] || '').trim())
+    if (missing) {
+      setRegistrationError(`${missing.label} is required.`)
+      return false
+    }
+    setRegistrationError('')
+    return true
+  }
+
+  const nextStep = () => {
+    if (!validateRegistrationStep()) return
+    setStep((prev) => Math.min(prev + 1, registrationSteps.length - 1))
+  }
   const previousStep = () => setStep((prev) => Math.max(prev - 1, 0))
 
   const submitRegistration = async () => {
+    const firstInvalid = [0, 1, 2, 3].find((targetStep) => !validateRegistrationStep(targetStep))
+    if (firstInvalid !== undefined) {
+      setStep(firstInvalid)
+      return
+    }
     setRegistrationSubmitting(true)
     setRegistrationError('')
     try {
@@ -135,16 +233,30 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
           logoUrl: registrationForm.logo,
           representativeName: registrationForm.repName,
           representativeEmail: registrationForm.repEmail,
+          representativeMobile: registrationForm.repMobile,
+          representativeDesignation: registrationForm.designation,
+          representativeEmployeeId: registrationForm.empId,
+          addressType: 'REGISTERED',
+          addressLine1: registrationForm.address,
+          addressLine2: registrationForm.addressLine2,
+          city: registrationForm.city,
+          district: registrationForm.district,
+          state: registrationForm.state,
+          postalCode: registrationForm.postalCode,
+          addressProofRef: registrationForm.addressProofRef,
         }),
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.message || 'Registration failed.')
 
-      setSuccessData({
+      const nextSuccessData = {
         orgId: data.organizationId,
         createdAt: new Date().toLocaleString(),
-        status: 'Awaiting platform approval',
-      })
+        status: 'Admin credentials sent',
+        officialEmail: registrationForm.email,
+      }
+      setSuccessData(nextSuccessData)
+      writeStorage('catalogue_last_registration_v1', JSON.stringify(nextSuccessData))
       setView('success')
       setStep(0)
     } catch (error) {
@@ -245,6 +357,7 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
           setOrgLoginError(data.message || 'Organization ID not found or not yet approved.')
           return
         }
+        setOrgLoginMaskedEmail(data.maskedEmail || '')
         setOrgLoginError('')
         setOrgLoginStage(2)
       } catch {
@@ -264,6 +377,7 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
           setOrgLoginError(data.message || 'Unable to send OTP.')
           return
         }
+        setOrgLoginMaskedEmail(data.maskedEmail || orgLoginMaskedEmail)
         setOrgLoginError('')
         setOrgLoginStage(3)
       } catch {
@@ -296,6 +410,7 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
     try {
       writeStorage('catalogue_state_v1', JSON.stringify({ organizations, pendingOrganizations, approvedOrganizations, applications, schemas }))
       writeStorage('catalogue_audit_v1', JSON.stringify(auditLogs))
+      if (successData) writeStorage('catalogue_last_registration_v1', JSON.stringify(successData))
     } catch {
       // best-effort demo persistence
     }
@@ -306,7 +421,7 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
       addAudit, appCredentialModal, appFilterStatus, appSearch, applications, approveApplication, approveOrganization, approveSchema,
       approvedOrganizations,
       auditLogs, confirmModal, confirmProcessing, currentOrg, handleOrgLoginSubmit, handlePlatformLogin, loginPolicies, loginPublishModal,
-      nextStep, orgApprovalModal, orgCredentialModal, orgLoginChannel, orgLoginError, orgLoginId, orgLoginStage, orgOtp, orgsFilter,
+      nextStep, orgApprovalModal, orgCredentialModal, orgLoginChannel, orgLoginError, orgLoginId, orgLoginMaskedEmail, orgLoginStage, orgOtp, orgsFilter,
       organizations, pendingOrganizations, platformLogin, platformLoginError, policyPreviewModal, previousStep, publishModal,
       registerAppForm, registerAppModal, registrationForm, registrationSteps, rejectOrganization, rejectSchema, requestModal,
       requestMoreInfo, schemaFilterStatus, schemaSearch, schemas, schemaTab, setAppCredentialModal, setAppFilterStatus, setApplications,

@@ -9,8 +9,8 @@ interface OrgSidebarProps {
 }
 
 export default function OrgSidebar({ activeItem }: OrgSidebarProps) {
-  const { approvedOrganizations, currentOrg, orgLoginId, setView } = useCatalogue()
-  const org = currentOrg || approvedOrganizations[0]
+  const { currentOrg, orgLoginId, setView } = useCatalogue()
+  const org = currentOrg
 
   const handleClick = (item: string) => {
     if (item === 'Dashboard') setView('organization-dashboard')
