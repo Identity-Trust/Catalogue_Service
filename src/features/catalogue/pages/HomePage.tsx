@@ -38,46 +38,31 @@
 
 import keycloak from '../../../lib/keycloak'
 import { useCatalogue } from '../context/CatalogueContext'
+import { ShieldCheck, Building2, UserCog } from 'lucide-react'
 
 
 export default function HomePage() {
   const { setView } = useCatalogue()
 
-const handlePlatformAdminLogin = async () => {
-  console.log('Platform Admin button clicked')
+  const handlePlatformAdminLogin = async () => {
+    console.log('Platform Admin button clicked')
 
-  try {
-    console.log('Keycloak authenticated:', keycloak.authenticated)
+    try {
+      console.log('Keycloak authenticated:', keycloak.authenticated)
 
-    await keycloak.login({
-      redirectUri: `${window.location.origin}/platform/dashboard`,
-    })
+      await keycloak.login({
+        redirectUri: `${window.location.origin}/platform/dashboard`,
+      })
 
-    console.log('keycloak.login() called')
-  } catch (error) {
-    console.error('Platform Admin login failed:', error)
+      console.log('keycloak.login() called')
+    } catch (error) {
+      console.error('Platform Admin login failed:', error)
+    }
   }
-}
 
 
   return (
     <div className="home-screen">
-      <div className="home-topbar">
-        <div className="brand-mark">
-          <span className="brand-icon">O</span>
-          <span>Identity OS</span>
-        </div>
-
-        <div className="topbar-right">
-          <span className="version-label">v2.5.8</span>
-
-          <div className="status-pill">
-            <span className="status-dot" />
-            All Systems Operational
-          </div>
-        </div>
-      </div>
-
       <section className="hero-block">
         <div className="hero-copy">
           <div className="brand-label">
@@ -103,8 +88,11 @@ const handlePlatformAdminLogin = async () => {
             className="role-card primary"
             onClick={() => setView('registration')}
           >
-            <span className="role-icon role-icon-blue">ID</span>
+            {/* <span className="role-icon role-icon-blue">RO</span> */}
 
+            <span className="role-icon role-icon-blue">
+              <Building2 size={28} strokeWidth={2} />
+            </span>
             <span className="role-card-title">
               Register Organization
             </span>
@@ -125,8 +113,10 @@ const handlePlatformAdminLogin = async () => {
             className="role-card admin-card"
             onClick={handlePlatformAdminLogin}
           >
-            <span className="role-icon role-icon-purple">S</span>
-
+            {/* <span className="role-icon role-icon-purple">PA</span> */}
+            <span className="role-icon role-icon-purple">
+              <ShieldCheck size={28} strokeWidth={2} />
+            </span>
             <span className="role-card-title">
               Platform Admin
             </span>
@@ -147,8 +137,10 @@ const handlePlatformAdminLogin = async () => {
             className="role-card org-card"
             onClick={() => setView('organization')}
           >
-            <span className="role-icon role-icon-green">G</span>
-
+            {/* <span className="role-icon role-icon-green">OA</span> */}
+            <span className="role-icon role-icon-green">
+              <UserCog size={28} strokeWidth={2} />
+            </span>
             <span className="role-card-title">
               Organization Admin
             </span>

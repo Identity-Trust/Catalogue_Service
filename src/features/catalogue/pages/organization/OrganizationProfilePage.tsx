@@ -2,6 +2,7 @@
 
 import { AdminIcon, ProfileField } from '../../../../components/ui'
 import OrgSidebar from '../../components/OrgSidebar'
+import OrgTopbar from '../../components/OrgTopbar'
 import { useCatalogue } from '../../context/CatalogueContext'
 
 export default function OrganizationProfilePage() {
@@ -9,13 +10,12 @@ export default function OrganizationProfilePage() {
   const org = currentOrg
   const representative = org?.representative
   const registrationNumber = org?.registrationDetails?.gst || org?.registrationDetails?.registrationNumber || '-'
-  const initials = (representative?.name || org?.name || 'Org').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()
 
   return (
     <div className="org-dashboard-shell org-profile-shell">
       <OrgSidebar activeItem="Organization Profile" />
       <main className="org-main org-profile-main">
-        <header className="org-profile-topbar"><h1>Organization Profile</h1><div className="org-user-chip"><span>{initials}</span>{representative?.name || org?.id || 'Organization Admin'}</div></header>
+        <OrgTopbar heading="Organization Profile" subtitle={representative?.name || org?.id || 'Organization Admin'} />
         <section className="org-profile-content">
           <article className="org-profile-card org-profile-summary">
             <div className="org-profile-hero"><span className="org-profile-logo"><AdminIcon name="organizations" /></span><div><h2>{org?.name || '-'}</h2><div className="org-profile-badges"><span>{org?.type || '-'}</span><span className="approved">Approved</span></div><code>{org?.id || orgLoginId}</code></div></div>

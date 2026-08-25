@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import OrgSidebar from '../../components/OrgSidebar'
+import OrgTopbar from '../../components/OrgTopbar'
 import { useCatalogue } from '../../context/CatalogueContext'
 import { readStorage } from '../../../../utils/storage'
 import type { RegistrationField, SchemaRecord } from '../../../../types/catalogue'
@@ -22,7 +23,7 @@ export default function RegistrationBuilderPage() {
     <div className="org-dashboard-shell org-console-shell">
       <OrgSidebar activeItem="Registration Builder" />
       <main className="org-main org-console-main">
-        <header className="org-console-topbar"><div className="org-console-title"><div className="eyebrow">Organization Admin</div><h1>Registration Form Builder</h1></div><button type="button" className="secondary-button" onClick={() => setView('organization-dashboard')}>Back to Dashboard</button></header>
+        <OrgTopbar heading="Registration Form Builder" action={<button type="button" className="secondary-button" onClick={() => setView('organization-dashboard')}>Back to Dashboard</button>} />
         <section className="org-console-content builder-console-content">
       <div className="builder-grid">
         <div className="builder-palette form-card"><h4>Available Fields</h4>{['text','email','phone','password','date','dropdown','checkbox','address','file','gov-id','custom'].map((type) => <button key={type} className="ghost-button" draggable onDragStart={(e) => e.dataTransfer.setData('text/plain', type)} onClick={() => addField(type)}>{type}</button>)}</div>

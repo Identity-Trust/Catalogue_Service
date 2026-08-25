@@ -107,7 +107,7 @@ button { cursor: pointer; }
   width: min(642px, 100%);
   min-height: auto;
   margin: 0 auto;
-  padding-top: 202px;
+  /* padding-top: 202px; */
   padding-bottom: 0;
   display: flex;
   flex-direction: column;
@@ -395,6 +395,14 @@ input, select, textarea {
   padding: 12px 14px;
 }
 
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: rgba(96, 165, 250, 0.78);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.16);
+}
+
 textarea {
   resize: vertical;
   min-height: 112px;
@@ -406,6 +414,29 @@ textarea {
   align-items: end;
   gap: 16px;
   margin-bottom: 18px;
+}
+
+.verify-row {
+  grid-template-columns: minmax(0, 1fr) 82px;
+  gap: 10px;
+}
+
+.verify-button {
+  height: 38px;
+  min-width: 76px;
+  border: 1px solid rgba(96, 165, 250, 0.35);
+  border-radius: 8px;
+  background: rgba(37, 99, 235, 0.12);
+  color: #bfdbfe;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 0 12px;
+}
+
+.verify-button:hover {
+  background: rgba(37, 99, 235, 0.22);
+  color: #ffffff;
 }
 
 .ghost-button, .secondary-button, .primary-button, .tab, .menu-item, .channel-option {
@@ -542,6 +573,211 @@ textarea {
   margin: 10px 0 14px;
   color: #ffb7b7;
   font-size: 0.9rem;
+}
+
+.registration-shell,
+.org-login-shell {
+  max-width: 1180px;
+  padding: 22px 22px 44px;
+}
+
+.registration-layout,
+.org-login-layout {
+  display: grid;
+  grid-template-columns: 330px minmax(0, 1fr);
+  gap: 22px;
+  align-items: stretch;
+}
+
+.registration-aside,
+.org-login-visual {
+  min-height: 620px;
+  border: 1px solid rgba(96, 165, 250, 0.22);
+  border-radius: 18px;
+  padding: 26px;
+  background:
+    linear-gradient(180deg, rgba(17, 35, 74, 0.96), rgba(9, 18, 36, 0.96)),
+    #0b1220;
+  box-shadow: 0 22px 55px rgba(2, 6, 23, 0.28);
+}
+
+.registration-mark,
+.login-shield {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: #1769ff;
+  color: white;
+  font-weight: 900;
+  box-shadow: 0 14px 28px rgba(23, 105, 255, 0.32);
+}
+
+.registration-aside h1,
+.org-login-visual h1 {
+  margin: 22px 0 10px;
+  color: #ffffff;
+  font-size: 30px;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.registration-aside p,
+.org-login-visual p {
+  margin: 0;
+  color: #a8c7ee;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.registration-steps-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 30px;
+}
+
+.registration-step-item {
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 10px;
+  color: #9fb8dc;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.registration-step-item span {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.8);
+  color: #93c5fd;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.registration-step-item strong {
+  font-size: 13px;
+}
+
+.registration-step-item.active {
+  border-color: rgba(96, 165, 250, 0.55);
+  background: rgba(37, 99, 235, 0.16);
+  color: #ffffff;
+}
+
+.registration-main {
+  min-width: 0;
+}
+
+.registration-progress {
+  margin-top: 4px;
+}
+
+.registration-copy h2 {
+  font-size: 28px;
+  letter-spacing: 0;
+}
+
+.registration-card,
+.org-login-card {
+  border-radius: 18px;
+  background: rgba(11, 17, 30, 0.96);
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+.registration-card {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 16px;
+}
+
+.registration-card .step-row,
+.registration-card .split-row,
+.registration-card .error-message,
+.registration-card .form-actions {
+  grid-column: 1 / -1;
+}
+
+.registration-card .step-row:nth-child(1),
+.registration-card .step-row:nth-child(2),
+.registration-card .step-row:nth-child(3) {
+  grid-column: auto;
+}
+
+.registration-card .form-actions {
+  padding-top: 6px;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.org-login-layout {
+  grid-template-columns: minmax(280px, 420px) minmax(360px, 520px);
+  justify-content: center;
+  min-height: 640px;
+  align-items: center;
+}
+
+.org-login-visual {
+  min-height: 520px;
+}
+
+.login-security-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 32px;
+}
+
+.login-security-list span {
+  padding: 11px 12px;
+  border: 1px solid rgba(96, 165, 250, 0.16);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.035);
+  color: #d8eaff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.org-login-card {
+  width: 100%;
+  margin: 0;
+  padding: 28px;
+  box-shadow: 0 24px 55px rgba(2, 6, 23, 0.24);
+}
+
+.login-progress {
+  justify-content: center;
+}
+
+.login-copy {
+  text-align: center;
+}
+
+.login-copy h2 {
+  margin: 0;
+  color: #ffffff;
+  font-size: 28px;
+  letter-spacing: 0;
+}
+
+.login-copy p {
+  max-width: 360px;
+  margin: 8px auto 0;
+}
+
+.login-submit,
+.org-login-card .primary-button {
+  width: 100%;
+}
+
+.org-login-card .channel-option {
+  border-radius: 12px;
+  padding: 14px;
+  text-align: center;
 }
 
 .dashboard-shell {
@@ -721,9 +957,50 @@ textarea {
   font-weight: 700;
 }
 
+.platform-logout-button {
+  width: auto;
+  min-height: 34px;
+  border: 1px solid #d7e0eb;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #17345c;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.platform-logout-button:hover {
+  border-color: #b7c5d8;
+  background: #f4f7fb;
+}
+
 .admin-account-pill .admin-icon {
   width: 14px;
   height: 14px;
+}
+
+.platform-topbar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.platform-notification-badge {
+  min-width: 18px;
+  height: 18px;
+  display: inline-grid;
+  place-items: center;
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #ffffff;
+  border: 2px solid #ffffff;
+  font-size: 11px;
+  font-weight: 900;
 }
 
 .platform-content {
@@ -843,6 +1120,47 @@ textarea {
   stroke-width: 2.5;
 }
 
+.status-chart {
+  min-height: 210px;
+  display: grid;
+  align-content: center;
+  gap: 18px;
+}
+
+.status-bar-row {
+  display: grid;
+  grid-template-columns: 92px minmax(120px, 1fr) 28px;
+  align-items: center;
+  gap: 12px;
+  color: #172842;
+}
+
+.status-bar-row span {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.status-bar-row div {
+  height: 11px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #edf2f8;
+}
+
+.status-bar-row strong {
+  min-width: 7px;
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+  background: #347cff;
+}
+
+.status-bar-row b {
+  color: #5a6b84;
+  font-size: 13px;
+  text-align: right;
+}
+
 .bar-chart {
   height: 210px;
   padding: 18px 6px 22px 40px;
@@ -895,6 +1213,23 @@ textarea {
   padding: 21px 22px 0;
 }
 
+.pending-review-card {
+  margin-bottom: 25px;
+  padding-bottom: 18px;
+}
+
+.pending-review-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.pending-review-header h2 {
+  margin-bottom: 0;
+}
+
 .recent-activity-list {
   display: grid;
 }
@@ -918,6 +1253,18 @@ textarea {
 
 .activity-dot.blue { background: #347cff; }
 .activity-dot.orange { background: #ff9f1a; }
+.activity-dot.red { background: #ef4444; }
+
+.empty-state {
+  padding: 28px 20px;
+  border: 1px dashed #cbd6e5;
+  border-radius: 8px;
+  background: #f8fafd;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+}
 
 .activity-type {
   justify-self: start;
@@ -1100,6 +1447,103 @@ textarea {
   box-shadow: 0 8px 20px rgba(2,6,23,0.35);
 }
 
+.platform-dashboard-main .panel-copy p {
+  color: #5d6f8a;
+}
+
+.platform-dashboard-main .form-card,
+.platform-dashboard-main .approval-card {
+  background: #ffffff;
+  border: 1px solid #dce4ef;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.11);
+  color: #13233f;
+}
+
+.platform-dashboard-main h4 {
+  color: #13233f;
+}
+
+.platform-dashboard-main input,
+.platform-dashboard-main select,
+.platform-dashboard-main textarea {
+  min-height: 42px;
+  border: 1px solid #cbd7e6;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #10233f;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
+}
+
+.platform-dashboard-main input::placeholder,
+.platform-dashboard-main textarea::placeholder {
+  color: #7b8aa3;
+}
+
+.platform-dashboard-main select {
+  appearance: none;
+  padding-right: 40px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #355272 50%),
+    linear-gradient(135deg, #355272 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) 18px,
+    calc(100% - 12px) 18px;
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+}
+
+.platform-dashboard-main select option {
+  background: #ffffff;
+  color: #10233f;
+}
+
+.platform-dashboard-main .ghost-button,
+.platform-dashboard-main .secondary-button,
+.platform-dashboard-main .tab {
+  border-color: #cbd7e6;
+  background: #ffffff;
+  color: #17345c;
+  font-weight: 800;
+}
+
+.platform-dashboard-main .ghost-button:hover,
+.platform-dashboard-main .secondary-button:hover,
+.platform-dashboard-main .tab:hover {
+  border-color: #9fb2cc;
+  background: #f3f7fc;
+}
+
+.platform-dashboard-main .tab.active {
+  border-color: #2f7aff;
+  background: #eaf2ff;
+  color: #1156c5;
+  box-shadow: inset 0 -2px 0 #2f7aff;
+}
+
+.platform-dashboard-main .primary-button {
+  border: 1px solid #1769ff;
+  border-radius: 8px;
+  background: #1769ff;
+  color: #ffffff;
+  box-shadow: 0 8px 18px rgba(23, 105, 255, 0.18);
+}
+
+.platform-dashboard-main .primary-button:hover {
+  background: #0f5add;
+}
+
+.platform-dashboard-main .danger-button {
+  border-color: #fecaca;
+  background: #fff5f5;
+  color: #b42318;
+}
+
+.platform-dashboard-main .danger-button:hover {
+  border-color: #fca5a5;
+  background: #ffe9e9;
+}
+
 .approval-card > div:first-child {
   min-width: 0;
 }
@@ -1119,6 +1563,14 @@ textarea {
   font-size: 1.14rem;
   font-weight: 700;
   overflow-wrap: anywhere;
+  color: #eef6ff;
+}
+
+.approval-name-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .approval-meta {
@@ -1127,12 +1579,80 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+.approval-description {
+  color: rgba(216, 226, 245, 0.75);
+  opacity: 1;
+}
+
+.platform-dashboard-main .approval-name {
+  color: #10233f;
+}
+
+.platform-dashboard-main .approval-meta {
+  color: #5f718c;
+}
+
+.platform-dashboard-main .approval-description {
+  color: #52647f;
+}
+
 .approval-actions {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
   justify-content: flex-end;
   flex: 0 0 auto;
+}
+
+.icon-text-button,
+.status-pill-ui {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.icon-text-button .admin-icon,
+.status-pill-ui .admin-icon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+
+.status-pill-ui {
+  min-height: 27px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #d7e1ee;
+  background: #f8fafc;
+  color: #3b4f6b;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  text-transform: capitalize;
+}
+
+.status-pill-ui.status-pending {
+  border-color: #f5d487;
+  background: #fff8e8;
+  color: #9a5b00;
+}
+
+.status-pill-ui.status-approved {
+  border-color: #a9e7cf;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.status-pill-ui.status-rejected {
+  border-color: #f7b7b7;
+  background: #fff1f2;
+  color: #b42318;
+}
+
+.status-pill-ui.status-suspended {
+  border-color: #c7d2fe;
+  background: #eef2ff;
+  color: #3730a3;
 }
 
 .modal-backdrop {
@@ -2317,6 +2837,28 @@ textarea {
   }
 
   .split-row {
+    grid-template-columns: 1fr;
+  }
+
+  .verify-row {
+    grid-template-columns: 1fr;
+  }
+
+  .verify-button {
+    width: fit-content;
+  }
+
+  .registration-layout,
+  .org-login-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .registration-aside,
+  .org-login-visual {
+    min-height: auto;
+  }
+
+  .registration-card {
     grid-template-columns: 1fr;
   }
 

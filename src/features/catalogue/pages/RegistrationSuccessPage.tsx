@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import keycloak from '../../../lib/keycloak'
 import PageHeader from '../components/PageHeader'
 import { useCatalogue } from '../context/CatalogueContext'
 
@@ -16,6 +17,12 @@ export default function RegistrationSuccessPage() {
     window.setTimeout(() => setCopied(false), 1800)
   }
 
+  const openPlatformAdmin = async () => {
+    await keycloak.login({
+      redirectUri: `${window.location.origin}/platform/dashboard`,
+    })
+  }
+
   return (
     <section className="panel-page success-page">
       <PageHeader title="Identity OS - Registration Submitted" onBack={() => setView('home')} />
@@ -29,7 +36,7 @@ export default function RegistrationSuccessPage() {
         </div>
         <div className="meta-row"><div><label>Created</label><p>{successData?.createdAt || '-'}</p></div><div><label>Status</label><p>{successData?.status || '-'}</p></div>{successData?.officialEmail && <div><label>Official Email</label><p>{successData.officialEmail}</p></div>}</div>
       </div>
-      <div className="success-actions"><button type="button" className="secondary-button" onClick={() => setView('home')}>Back to Home</button><button type="button" className="secondary-button" onClick={() => setView('platform')}>Platform Admin Portal</button><button type="button" className="primary-button" onClick={() => setView('organization')}>Organization Admin Login</button></div>
+      <div className="success-actions"><button type="button" className="secondary-button" onClick={() => setView('home')}>Back to Home</button><button type="button" className="secondary-button" onClick={openPlatformAdmin}>Platform Admin Portal</button><button type="button" className="primary-button" onClick={() => setView('organization')}>Organization Admin Login</button></div>
     </section>
   )
 }

@@ -123,6 +123,5 @@ export type ApprovalModal =
   | { type: 'schema'; item: SchemaRecord }
 
 export type RequestModal = { target: Organization; message?: string; open?: boolean }
-export type CredentialModal = { org: Organization; username: string; password: string }
 export type AppCredentialModal = { app: ApplicationRecord; clientId?: string; clientSecret?: string }
 export type ConfirmModal = { title: string; message: string; onConfirm: () => Promise<void> | void }

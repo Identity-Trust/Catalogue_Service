@@ -2,16 +2,16 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import keycloak, { logoutFromKeycloak } from '../../../../lib/keycloak'
+import keycloak from '../../../../lib/keycloak'
 import { AdminIcon } from '../../../../components/ui'
 import OrgSidebar from '../../components/OrgSidebar'
+import OrgTopbar from '../../components/OrgTopbar'
 import { useCatalogue } from '../../context/CatalogueContext'
 
 export default function OrganizationDashboardPage() {
   const { applications, currentOrg, orgLoginId, setView } = useCatalogue()
   const router = useRouter()
   const [authorized, setAuthorized] = useState(false)
-  const [profileOpen, setProfileOpen] = useState(false)
 
   useEffect(() => {
     if (!keycloak.authenticated || !keycloak.hasRealmRole('ORGANISATION_ADMIN')) {
@@ -21,34 +21,17 @@ export default function OrganizationDashboardPage() {
     setAuthorized(true)
   }, [router])
 
-  const handleLogout = async () => {
-    await logoutFromKeycloak()
-  }
-
   if (!authorized) return <div>Checking authentication...</div>
 
   const registrationNumber = currentOrg?.registrationDetails?.gst || currentOrg?.registrationDetails?.registrationNumber || '-'
   const organizationId = currentOrg?.id || orgLoginId || (keycloak.tokenParsed?.organization_id as string | undefined) || '-'
   const orgApps = applications.filter((app) => app.orgId === organizationId)
-  const initials = (currentOrg?.name || organizationId).split(/[ _-]/).filter(Boolean).map((part) => part[0]).join('').slice(0, 2).toUpperCase()
 
   return (
     <div className="org-dashboard-shell org-console-shell">
       <OrgSidebar activeItem="Dashboard" />
       <main className="org-main org-console-main">
-        <header className="org-console-topbar">
-          <div className="org-console-title">
-            <div className="eyebrow">Organization Admin</div>
-            <h1>{currentOrg?.name || organizationId}</h1>
-          </div>
-          <div className="org-console-actions">
-            <button type="button" className="icon-button" title="Notifications"><AdminIcon name="notifications" /><span className="notification-dot" /></button>
-            <div className="profile-menu">
-              <button type="button" className="profile-trigger" onClick={() => setProfileOpen((open) => !open)}><span>{initials}</span><strong>{organizationId}</strong></button>
-              {profileOpen && <div className="profile-dropdown"><button type="button" onClick={() => setView('org-profile')}>Organization Profile</button><button type="button" onClick={handleLogout}>Log Out</button></div>}
-            </div>
-          </div>
-        </header>
+        <OrgTopbar heading={currentOrg?.name || organizationId} />
         <section className="org-console-content">
           <div className="org-dashboard-hero">
             <div>

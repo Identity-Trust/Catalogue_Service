@@ -13,7 +13,9 @@ interface PlatformSidebarProps {
 }
 
 const navSections = [
-  { title: null, items: [{ label: 'Dashboard', key: 'platform-dashboard', icon: 'dashboard' }] },
+  { title: null, items: [
+    { label: 'Dashboard', key: 'platform-dashboard', icon: 'dashboard' },
+  ] },
   {
     title: 'Management',
     items: [

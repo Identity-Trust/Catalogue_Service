@@ -22,6 +22,10 @@ export function AdminIcon({ name }: { name?: string }) {
     reports: <><path {...common} d="M6 20V10M12 20V4M18 20v-7" /></>,
     notifications: <><path {...common} d="M18 16v-5a6 6 0 1 0-12 0v5l-2 3h16l-2-3z" /><path {...common} d="M10 21h4" /></>,
     check: <><circle {...common} cx="12" cy="12" r="9" /><path {...common} d="M8 12l3 3 5-6" /></>,
+    pending: <><circle {...common} cx="12" cy="12" r="9" /><path {...common} d="M12 7v5l3 2" /></>,
+    rejected: <><circle {...common} cx="12" cy="12" r="9" /><path {...common} d="M9 9l6 6M15 9l-6 6" /></>,
+    suspended: <><circle {...common} cx="12" cy="12" r="9" /><path {...common} d="M8 12h8" /></>,
+    view: <><path {...common} d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" /><circle {...common} cx="12" cy="12" r="3" /></>,
   }
 
   return <svg className="admin-icon" viewBox="0 0 24 24" aria-hidden="true">{paths[name] || paths.dashboard}</svg>

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import OrgSidebar from '../../components/OrgSidebar'
+import OrgTopbar from '../../components/OrgTopbar'
 import { useCatalogue } from '../../context/CatalogueContext'
 import { readStorage } from '../../../../utils/storage'
 
@@ -34,7 +35,7 @@ export default function LoginBuilderPage() {
     <div className="org-dashboard-shell org-console-shell">
       <OrgSidebar activeItem="Login Configuration" />
       <main className="org-main org-console-main">
-        <header className="org-console-topbar"><div className="org-console-title"><div className="eyebrow">Organization Admin</div><h1>Login Page Builder</h1></div><button type="button" className="secondary-button" onClick={() => setView('organization-dashboard')}>Back to Dashboard</button></header>
+        <OrgTopbar heading="Login Page Builder" action={<button type="button" className="secondary-button" onClick={() => setView('organization-dashboard')}>Back to Dashboard</button>} />
         <section className="org-console-content builder-console-content">
       <div className="builder-grid">
         <div className="builder-palette form-card"><h4>Authentication Methods</h4>{authOptions.map((option) => <label key={option.key} style={{display:'block',marginBottom:8}}><input type="checkbox" checked={selectedMethods.includes(option.key)} onChange={() => toggleMethod(option.key)} /> {option.label}</label>)}<div style={{marginTop:12}}><h5>MFA</h5><label style={{display:'block'}}><input type="checkbox" checked={mfaEnabled} onChange={(e) => { setMfaEnabled(e.target.checked); localStorage.setItem('catalogue_login_builder_mfa', JSON.stringify(e.target.checked)) }} /> Enable MFA</label>{mfaEnabled && <div style={{marginTop:8}}>{['OTP','AUTH_APP','BIOMETRIC'].map((method) => <label key={method} style={{display:'block'}}><input type="checkbox" checked={mfaMethods.includes(method)} onChange={() => toggleMfaMethod(method)} /> {method}</label>)}</div>}<div style={{marginTop:12}}><label style={{display:'block'}}>Risk-based Authentication<input type="checkbox" checked={riskAuth} onChange={(e) => { setRiskAuth(e.target.checked); localStorage.setItem('catalogue_login_builder_risk', JSON.stringify(e.target.checked)) }} /></label></div></div></div>

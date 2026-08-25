@@ -1,10 +1,9 @@
 'use client'
 
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { approvedOrgIds, approvedSeedOrganizations, initialApplications, initialPendingOrganizations, initialSchemas } from '../../../data/mockCatalogueData'
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
 import keycloak from '../../../lib/keycloak'
-import type { ApplicationRecord, AppCredentialModal, ApprovalModal, AuditLog, ConfirmModal, CredentialModal, LoginPolicy, Organization, RequestModal, SavedState, SchemaRecord } from '../../../types/catalogue'
+import type { ApplicationRecord, AppCredentialModal, ApprovalModal, AuditLog, ConfirmModal, LoginPolicy, Organization, RequestModal, SchemaRecord } from '../../../types/catalogue'
 import { readStorage, writeStorage } from '../../../utils/storage'
 import { getCatalogueRoute, type CatalogueView } from '../routes'
 
@@ -24,15 +23,6 @@ const requiredRegistrationFields: Array<{ key: string; label: string }> = [
   { key: 'postalCode', label: 'Postal code' },
 ]
 
-const loadSaved = () => {
-  try {
-    const raw = readStorage('catalogue_state_v1')
-    return raw ? JSON.parse(raw) as SavedState : null
-  } catch {
-    return null
-  }
-}
-
 const createClientSecret = () => {
   try {
     const arr = new Uint8Array(24)
@@ -41,6 +31,28 @@ const createClientSecret = () => {
   } catch {
     return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)
   }
+}
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080'
+
+const backendRequest = async <TResponse,>(path: string, init?: RequestInit): Promise<TResponse> => {
+  if (keycloak.authenticated) {
+    await keycloak.updateToken(30)
+  }
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(keycloak.token ? { Authorization: `Bearer ${keycloak.token}` } : {}),
+      ...init?.headers,
+    },
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `Request failed: ${response.status}`)
+  }
+  if (response.status === 204) return undefined as TResponse
+  return response.json() as Promise<TResponse>
 }
 
 interface CatalogueProviderProps {
@@ -52,6 +64,7 @@ const CatalogueContext = createContext<any>(null)
 
 export function CatalogueProvider({ children, initialView = 'home' }: CatalogueProviderProps) {
   const router = useRouter()
+  const pathname = usePathname()
   const [view, setCurrentView] = useState<CatalogueView>(initialView)
   const [step, setStep] = useState(0)
   const [registrationForm, setRegistrationForm] = useState({
@@ -59,10 +72,10 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
   })
   const [platformLogin, setPlatformLogin] = useState({ username: '', password: '' })
   const [platformLoginError, setPlatformLoginError] = useState('')
-  const [pendingOrganizations, setPendingOrganizations] = useState<Organization[]>(initialPendingOrganizations)
-  const [approvedOrganizations, setApprovedOrganizations] = useState<Organization[]>(approvedSeedOrganizations)
-  const [applications, setApplications] = useState<ApplicationRecord[]>(initialApplications)
-  const [schemas, setSchemas] = useState<SchemaRecord[]>(initialSchemas)
+  const [pendingOrganizations, setPendingOrganizations] = useState<Organization[]>([])
+  const [approvedOrganizations, setApprovedOrganizations] = useState<Organization[]>([])
+  const [applications, setApplications] = useState<ApplicationRecord[]>([])
+  const [schemas, setSchemas] = useState<SchemaRecord[]>([])
   const [schemaTab, setSchemaTab] = useState('registration')
   const [schemaSearch, setSchemaSearch] = useState('')
   const [schemaFilterStatus, setSchemaFilterStatus] = useState('All')
@@ -87,8 +100,7 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
       return []
     }
   })
-  const saved = loadSaved()
-  const [organizations, setOrganizations] = useState<Organization[]>(() => saved?.organizations || [...approvedSeedOrganizations, ...initialPendingOrganizations.map((org) => ({ ...org }))])
+  const [organizations, setOrganizations] = useState<Organization[]>([])
   const [orgsFilter, setOrgsFilter] = useState('All')
   const [orgApprovalModal, setOrgApprovalModal] = useState<ApprovalModal | null>(null)
   const [orgLoginStage, setOrgLoginStage] = useState(1)
@@ -110,18 +122,22 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
   const [registrationError, setRegistrationError] = useState('')
   const [registrationSubmitting, setRegistrationSubmitting] = useState(false)
   const [requestModal, setRequestModal] = useState<RequestModal | null>(null)
-  const [orgCredentialModal, setOrgCredentialModal] = useState<CredentialModal | null>(null)
   const [appCredentialModal, setAppCredentialModal] = useState<AppCredentialModal | null>(null)
   const [publishModal, setPublishModal] = useState<SchemaRecord | null>(null)
   const [loginPublishModal, setLoginPublishModal] = useState<LoginPolicy | null>(null)
   const [confirmModal, setConfirmModal] = useState<ConfirmModal | null>(null)
   const [confirmProcessing, setConfirmProcessing] = useState(false)
+  const refreshInFlight = useRef<Promise<void> | null>(null)
 
   useEffect(() => setCurrentView(initialView), [initialView])
 
   const setView = (nextView: CatalogueView) => {
-    setCurrentView(nextView)
-    router.push(getCatalogueRoute(nextView))
+    const nextRoute = getCatalogueRoute(nextView)
+    if (pathname === nextRoute) {
+      setCurrentView(nextView)
+      return
+    }
+    router.push(nextRoute)
   }
 
   const currentOrg = useMemo(() => {
@@ -148,6 +164,48 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
       gst: profile.verificationId,
     },
   })
+
+  const mapBackendApplication = (app: any): ApplicationRecord => ({
+    id: app.applicationId,
+    orgId: app.organizationId,
+    orgName: app.organizationName || '',
+    name: app.applicationName,
+    type: app.applicationType,
+    description: app.description || '',
+    redirectUri: app.redirectUri || '',
+    status: app.status === 'ACTIVE' ? 'approved' : app.status === 'SUSPENDED' ? 'rejected' : 'pending',
+    createdAt: app.createdAt ? new Date(app.createdAt).toLocaleString() : new Date().toLocaleString(),
+  })
+
+  const refreshCatalogueData = async () => {
+    if (typeof window === 'undefined') return
+    if (refreshInFlight.current) return refreshInFlight.current
+    const refreshPromise = (async () => {
+      try {
+        const [orgProfiles, backendApps] = await Promise.all([
+          backendRequest<any[]>('/api/v1/onboarding/organizations'),
+          backendRequest<any[]>('/api/v1/onboarding/applications'),
+        ])
+        const mappedOrgs = orgProfiles.map((profile) => {
+          const org = mapOrganizationProfile(profile)
+          return {
+            ...org,
+            status: profile.approvalStatus === 'APPROVED' ? 'approved' : profile.approvalStatus === 'REJECTED' ? 'rejected' : 'pending',
+          }
+        })
+        setOrganizations(mappedOrgs)
+        setPendingOrganizations(mappedOrgs.filter((org) => org.status === 'pending'))
+        setApprovedOrganizations(mappedOrgs.filter((org) => org.status === 'approved'))
+        setApplications(backendApps.map(mapBackendApplication))
+      } catch {
+        // Keep the current in-memory state if services are temporarily unreachable.
+      } finally {
+        refreshInFlight.current = null
+      }
+    })()
+    refreshInFlight.current = refreshPromise
+    return refreshPromise
+  }
 
   useEffect(() => {
     const tokenOrgId = keycloak.tokenParsed?.organization_id as string | undefined
@@ -257,6 +315,21 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
       }
       setSuccessData(nextSuccessData)
       writeStorage('catalogue_last_registration_v1', JSON.stringify(nextSuccessData))
+      const newPendingOrg: Organization = {
+        id: data.organizationId,
+        name: registrationForm.name,
+        type: registrationForm.type,
+        country: registrationForm.country,
+        email: registrationForm.email,
+        phone: registrationForm.phone,
+        status: 'pending',
+        registrationDetails: { registrationNumber: registrationForm.gst, gst: registrationForm.gst },
+        representative: { name: registrationForm.repName, email: registrationForm.repEmail, mobile: registrationForm.repMobile, designation: registrationForm.designation },
+        address: [registrationForm.address, registrationForm.addressLine2, registrationForm.city, registrationForm.state, registrationForm.postalCode].filter(Boolean).join(', '),
+        submittedAt: new Date().toLocaleString(),
+      }
+      setOrganizations((prev) => [newPendingOrg, ...prev.filter((org) => org.id !== newPendingOrg.id)])
+      setPendingOrganizations((prev) => [newPendingOrg, ...prev.filter((org) => org.id !== newPendingOrg.id)])
       setView('success')
       setStep(0)
     } catch (error) {
@@ -275,16 +348,23 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
     setPlatformLoginError('Invalid username or password. Please use admin / admin.')
   }
 
-  const approveOrganization = (org: Organization) => {
+  const approveOrganization = async (org: Organization) => {
+    await backendRequest<void>(`/api/v1/onboarding/organizations/${encodeURIComponent(org.id)}/approval`, {
+      method: 'POST',
+      body: JSON.stringify({ decision: 'APPROVED' }),
+    })
     const approved = { ...org, status: 'approved', approvedAt: new Date().toLocaleString(), orgAdminActivated: true }
     setPendingOrganizations((prev) => prev.filter((item) => item.id !== org.id))
     setApprovedOrganizations((prev) => [approved, ...prev])
     setOrganizations((prev) => prev.some((item) => item.id === org.id) ? prev.map((item) => item.id === org.id ? approved : item) : [approved, ...prev])
-    setOrgCredentialModal({ org, username: `${org.name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().slice(0, 8)}_admin`, password: Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(-2) })
     setOrgApprovalModal(null)
   }
 
-  const rejectOrganization = (org: Organization) => {
+  const rejectOrganization = async (org: Organization) => {
+    await backendRequest<void>(`/api/v1/onboarding/organizations/${encodeURIComponent(org.id)}/approval`, {
+      method: 'POST',
+      body: JSON.stringify({ decision: 'REJECTED' }),
+    })
     setPendingOrganizations((prev) => prev.filter((item) => item.id !== org.id))
     setOrganizations((prev) => prev.map((item) => item.id === org.id ? { ...item, status: 'rejected', rejectedAt: new Date().toLocaleString() } : item))
     setOrgApprovalModal(null)
@@ -296,13 +376,48 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
     setOrgApprovalModal(null)
   }
 
-  const approveApplication = (app: ApplicationRecord) => {
+  const approveApplication = async (app: ApplicationRecord) => {
+    await backendRequest<void>(`/api/v1/onboarding/applications/${encodeURIComponent(app.id)}/approval`, {
+      method: 'POST',
+      body: JSON.stringify({ decision: 'APPROVED' }),
+    })
     const clientId = `client_${Math.random().toString(36).slice(2, 10)}`
     const clientSecret = createClientSecret()
     const updated = { ...app, status: 'approved', clientId, clientSecret, approvedAt: new Date().toLocaleString() }
     setApplications((prev) => prev.map((item) => item.id === app.id ? updated : item))
     setAppCredentialModal({ app: updated, clientId, clientSecret })
     setOrgApprovalModal(null)
+  }
+
+  const rejectApplication = async (app: ApplicationRecord) => {
+    await backendRequest<void>(`/api/v1/onboarding/applications/${encodeURIComponent(app.id)}/approval`, {
+      method: 'POST',
+      body: JSON.stringify({ decision: 'REJECTED' }),
+    })
+    const updated = { ...app, status: 'rejected', rejectedAt: new Date().toLocaleString() }
+    setApplications((prev) => prev.map((item) => item.id === app.id ? updated : item))
+    setOrgApprovalModal(null)
+  }
+
+  const registerApplication = async () => {
+    const orgId = currentOrg?.id || orgLoginId
+    if (!orgId) throw new Error('Organization context is missing.')
+    if (!registerAppForm.name.trim()) throw new Error('Application name is required.')
+    if (!registerAppForm.redirectUri.trim()) throw new Error('Redirect URI is required.')
+    const app = await backendRequest<any>(`/api/v1/onboarding/organizations/${encodeURIComponent(orgId)}/applications`, {
+      method: 'POST',
+      body: JSON.stringify({
+        applicationName: registerAppForm.name,
+        applicationType: registerAppForm.type || 'web',
+        description: registerAppForm.description,
+        redirectUri: registerAppForm.redirectUri,
+      }),
+    })
+    const mappedApp = { ...mapBackendApplication(app), orgName: currentOrg?.name || app.organizationName || orgId }
+    setApplications((prev) => [mappedApp, ...prev])
+    addAudit('Submit Application', `Submitted application ${mappedApp.name} for approval`)
+    setRegisterAppForm({ name:'', type:'web', description:'', contactEmail:'', domain:'', redirectUri:'', logoutUri:'' })
+    setRegisterAppModal(false)
   }
 
   const approveSchema = (schema: SchemaRecord) => {
@@ -421,11 +536,11 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
       addAudit, appCredentialModal, appFilterStatus, appSearch, applications, approveApplication, approveOrganization, approveSchema,
       approvedOrganizations,
       auditLogs, confirmModal, confirmProcessing, currentOrg, handleOrgLoginSubmit, handlePlatformLogin, loginPolicies, loginPublishModal,
-      nextStep, orgApprovalModal, orgCredentialModal, orgLoginChannel, orgLoginError, orgLoginId, orgLoginMaskedEmail, orgLoginStage, orgOtp, orgsFilter,
+      nextStep, orgApprovalModal, orgLoginChannel, orgLoginError, orgLoginId, orgLoginMaskedEmail, orgLoginStage, orgOtp, orgsFilter,
       organizations, pendingOrganizations, platformLogin, platformLoginError, policyPreviewModal, previousStep, publishModal,
-      registerAppForm, registerAppModal, registrationForm, registrationSteps, rejectOrganization, rejectSchema, requestModal,
-      requestMoreInfo, schemaFilterStatus, schemaSearch, schemas, schemaTab, setAppCredentialModal, setAppFilterStatus, setApplications,
-      setAppSearch, setConfirmModal, setConfirmProcessing, setLoginPublishModal, setOrgApprovalModal, setOrgCredentialModal,
+      refreshCatalogueData, registerAppForm, registerAppModal, registrationForm, registrationSteps, rejectApplication, rejectOrganization, rejectSchema, requestModal,
+      requestMoreInfo, registerApplication, schemaFilterStatus, schemaSearch, schemas, schemaTab, setAppCredentialModal, setAppFilterStatus, setApplications,
+      setAppSearch, setConfirmModal, setConfirmProcessing, setLoginPublishModal, setOrgApprovalModal,
       setOrgLoginChannel, setOrgLoginId, setOrgOtp, setOrgsFilter, setPlatformLogin, setPolicyPreviewModal, setPublishModal,
       setRegisterAppForm, setRegisterAppModal, setRequestModal, setSchemaFilterStatus, setSchemas, setSchemaSearch, setSchemaTab,
       registrationError, registrationSubmitting, setOrganizations, setView, step, submitRegistration, successData, suspendOrganization, unsuspendOrganization, updateRegistrationField, view,
