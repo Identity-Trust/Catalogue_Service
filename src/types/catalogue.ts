@@ -90,12 +90,18 @@ export interface LoginPolicy {
 
 export interface SchemaRecord {
   id: string
+  versionId?: string
+  versionNumber?: number
   type: string
   name: string
   orgId?: string | null
   orgName?: string
+  appId?: string | null
+  appName?: string
   fields?: Array<string | RegistrationField>
   payload?: Omit<LoginPolicy, 'id' | 'name' | 'orgId' | 'createdAt'>
+  schemaJson?: unknown
+  configurationJson?: unknown
   status: string
   createdAt: string
   approvedAt?: string

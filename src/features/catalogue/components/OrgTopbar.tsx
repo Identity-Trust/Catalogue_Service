@@ -26,7 +26,7 @@ export default function OrgTopbar({ heading, subtitle, action }: OrgTopbarProps)
     <header className="org-console-topbar">
       <div className="org-console-title">
         <div className="eyebrow">Organization Admin</div>
-        <h1>{heading}</h1>
+        {/* <h1>{heading}</h1> */}
         {subtitle && <p className="topbar-subtitle">{subtitle}</p>}
       </div>
       <div className="org-console-actions">

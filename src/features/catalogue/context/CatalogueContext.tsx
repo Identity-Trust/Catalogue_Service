@@ -23,16 +23,6 @@ const requiredRegistrationFields: Array<{ key: string; label: string }> = [
   { key: 'postalCode', label: 'Postal code' },
 ]
 
-const createClientSecret = () => {
-  try {
-    const arr = new Uint8Array(24)
-    window.crypto.getRandomValues(arr)
-    return Array.from(arr).map((b) => (`0${b.toString(16)}`).slice(-2)).join('')
-  } catch {
-    return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)
-  }
-}
-
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080'
 
 const backendRequest = async <TResponse,>(path: string, init?: RequestInit): Promise<TResponse> => {
@@ -173,19 +163,57 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
     type: app.applicationType,
     description: app.description || '',
     redirectUri: app.redirectUri || '',
+    clientId: app.clientId || app.applicationId || '',
+    clientSecret: app.clientSecret || '',
     status: app.status === 'ACTIVE' ? 'approved' : app.status === 'SUSPENDED' ? 'rejected' : 'pending',
     createdAt: app.createdAt ? new Date(app.createdAt).toLocaleString() : new Date().toLocaleString(),
   })
+
+  const parseJson = (value?: string | null) => {
+    if (!value) return null
+    try {
+      return JSON.parse(value)
+    } catch {
+      return value
+    }
+  }
+
+  const mapBackendSchema = (schema: any): SchemaRecord => {
+    const schemaJson = parseJson(schema.schemaJson)
+    const configurationJson = parseJson(schema.configurationJson)
+    return {
+      id: schema.schemaId,
+      versionId: schema.versionId,
+      versionNumber: schema.versionNumber,
+      type: schema.schemaType === 'LOGIN' ? 'login' : 'registration',
+      name: schema.schemaName,
+      orgId: schema.organizationId,
+      orgName: schema.organizationName,
+      appId: schema.applicationId,
+      appName: schema.applicationName,
+      fields: schema.schemaType === 'REGISTRATION' ? (schemaJson?.registrationFields || schemaJson?.fields || []) : undefined,
+      payload: schema.schemaType === 'LOGIN' ? schemaJson : undefined,
+      schemaJson,
+      configurationJson,
+      status: schema.status === 'APPROVED' || schema.status === 'PUBLISHED' ? 'approved' : schema.status === 'REJECTED' ? 'rejected' : schema.status === 'DRAFT' ? 'draft' : 'pending',
+      createdAt: schema.createdAt ? new Date(schema.createdAt).toLocaleString() : new Date().toLocaleString(),
+      approvedAt: schema.publishedAt ? new Date(schema.publishedAt).toLocaleString() : undefined,
+    }
+  }
 
   const refreshCatalogueData = async () => {
     if (typeof window === 'undefined') return
     if (refreshInFlight.current) return refreshInFlight.current
     const refreshPromise = (async () => {
       try {
-        const [orgProfiles, backendApps] = await Promise.all([
+        const [orgProfilesResult, backendAppsResult, backendSchemasResult] = await Promise.allSettled([
           backendRequest<any[]>('/api/v1/onboarding/organizations'),
           backendRequest<any[]>('/api/v1/onboarding/applications'),
+          backendRequest<any[]>('/api/v1/onboarding/schemas'),
         ])
+        const orgProfiles = orgProfilesResult.status === 'fulfilled' ? orgProfilesResult.value : []
+        const backendApps = backendAppsResult.status === 'fulfilled' ? backendAppsResult.value : []
+        const backendSchemas = backendSchemasResult.status === 'fulfilled' ? backendSchemasResult.value : []
         const mappedOrgs = orgProfiles.map((profile) => {
           const org = mapOrganizationProfile(profile)
           return {
@@ -193,10 +221,17 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
             status: profile.approvalStatus === 'APPROVED' ? 'approved' : profile.approvalStatus === 'REJECTED' ? 'rejected' : 'pending',
           }
         })
-        setOrganizations(mappedOrgs)
-        setPendingOrganizations(mappedOrgs.filter((org) => org.status === 'pending'))
-        setApprovedOrganizations(mappedOrgs.filter((org) => org.status === 'approved'))
-        setApplications(backendApps.map(mapBackendApplication))
+        if (orgProfilesResult.status === 'fulfilled') {
+          setOrganizations(mappedOrgs)
+          setPendingOrganizations(mappedOrgs.filter((org) => org.status === 'pending'))
+          setApprovedOrganizations(mappedOrgs.filter((org) => org.status === 'approved'))
+        }
+        if (backendAppsResult.status === 'fulfilled') {
+          setApplications(backendApps.map(mapBackendApplication))
+        }
+        if (backendSchemasResult.status === 'fulfilled') {
+          setSchemas(backendSchemas.map(mapBackendSchema).filter((schema) => schema.status !== 'draft'))
+        }
       } catch {
         // Keep the current in-memory state if services are temporarily unreachable.
       } finally {
@@ -377,15 +412,14 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
   }
 
   const approveApplication = async (app: ApplicationRecord) => {
-    await backendRequest<void>(`/api/v1/onboarding/applications/${encodeURIComponent(app.id)}/approval`, {
+    const response = await backendRequest<any>(`/api/v1/onboarding/applications/${encodeURIComponent(app.id)}/approval`, {
       method: 'POST',
       body: JSON.stringify({ decision: 'APPROVED' }),
     })
-    const clientId = `client_${Math.random().toString(36).slice(2, 10)}`
-    const clientSecret = createClientSecret()
-    const updated = { ...app, status: 'approved', clientId, clientSecret, approvedAt: new Date().toLocaleString() }
+    const mapped = mapBackendApplication(response)
+    const updated = { ...app, ...mapped, status: 'approved', approvedAt: new Date().toLocaleString() }
     setApplications((prev) => prev.map((item) => item.id === app.id ? updated : item))
-    setAppCredentialModal({ app: updated, clientId, clientSecret })
+    setAppCredentialModal({ app: updated, clientId: updated.clientId || updated.id, clientSecret: updated.clientSecret })
     setOrgApprovalModal(null)
   }
 
@@ -420,7 +454,50 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
     setRegisterAppModal(false)
   }
 
-  const approveSchema = (schema: SchemaRecord) => {
+  const submitIdentitySchemaVersion = async ({
+    applicationId,
+    schemaType,
+    schemaName,
+    schemaJson,
+    configurationJson,
+    changeSummary,
+    submitForApproval = true,
+  }: {
+    applicationId: string
+    schemaType: 'REGISTRATION' | 'LOGIN'
+    schemaName: string
+    schemaJson: Record<string, unknown>
+    configurationJson?: Record<string, unknown>
+    changeSummary?: string
+    submitForApproval?: boolean
+  }) => {
+    const orgId = currentOrg?.id || orgLoginId
+    if (!orgId) throw new Error('Organization context is missing.')
+    if (!applicationId) throw new Error('Application is required.')
+    const response = await backendRequest<any>(`/api/v1/onboarding/organizations/${encodeURIComponent(orgId)}/applications/${encodeURIComponent(applicationId)}/schemas`, {
+      method: 'POST',
+      body: JSON.stringify({
+        schemaType,
+        schemaName,
+        schemaJson,
+        configurationJson,
+        changeSummary,
+        submitForApproval,
+      }),
+    })
+    const mappedSchema = mapBackendSchema(response)
+    setSchemas((prev) => [mappedSchema, ...prev.filter((schema) => schema.versionId !== mappedSchema.versionId)])
+    addAudit('Submit Schema Version', `Submitted ${schemaName} for ${mappedSchema.appName || applicationId}`)
+    return mappedSchema
+  }
+
+  const approveSchema = async (schema: SchemaRecord) => {
+    if (schema.versionId) {
+      await backendRequest<void>(`/api/v1/onboarding/schemas/versions/${encodeURIComponent(schema.versionId)}/approval`, {
+        method: 'POST',
+        body: JSON.stringify({ decision: 'APPROVED' }),
+      })
+    }
     if (schema.type === 'login') {
       const policy: LoginPolicy = {
         id: `policy_${Date.now()}`,
@@ -447,7 +524,13 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
     setOrgApprovalModal(null)
   }
 
-  const rejectSchema = (schema: SchemaRecord) => {
+  const rejectSchema = async (schema: SchemaRecord) => {
+    if (schema.versionId) {
+      await backendRequest<void>(`/api/v1/onboarding/schemas/versions/${encodeURIComponent(schema.versionId)}/approval`, {
+        method: 'POST',
+        body: JSON.stringify({ decision: 'REJECTED' }),
+      })
+    }
     setSchemas((prev) => prev.map((item) => item.id === schema.id ? { ...item, status: 'rejected', rejectedAt: new Date().toLocaleString() } : item))
     addAudit('Reject Schema', `Schema ${schema.name} rejected`)
     setOrgApprovalModal(null)
@@ -543,7 +626,7 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
       setAppSearch, setConfirmModal, setConfirmProcessing, setLoginPublishModal, setOrgApprovalModal,
       setOrgLoginChannel, setOrgLoginId, setOrgOtp, setOrgsFilter, setPlatformLogin, setPolicyPreviewModal, setPublishModal,
       setRegisterAppForm, setRegisterAppModal, setRequestModal, setSchemaFilterStatus, setSchemas, setSchemaSearch, setSchemaTab,
-      registrationError, registrationSubmitting, setOrganizations, setView, step, submitRegistration, successData, suspendOrganization, unsuspendOrganization, updateRegistrationField, view,
+      registrationError, registrationSubmitting, setOrganizations, setView, step, submitIdentitySchemaVersion, submitRegistration, successData, suspendOrganization, unsuspendOrganization, updateRegistrationField, view,
     }}>
       {children}
     </CatalogueContext.Provider>

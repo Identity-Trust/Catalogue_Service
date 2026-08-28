@@ -11,8 +11,9 @@ export default function PlatformDashboardPage() {
   useEffect(() => { refreshCatalogueData?.() }, [])
   const totalOrgs = organizations.length
   const approvedCount = organizations.filter((org) => org.status === 'approved').length
-  const pendingOrgCount = pendingOrganizations.filter((org) => org.status === 'pending' || org.status === 'requires_more_info').length
+  const pendingOrgCount = organizations.filter((org) => org.status === 'pending' || org.status === 'requires_more_info').length
   const pendingAppCount = applications.filter((app) => app.status === 'pending').length
+  const approvedAppCount = applications.filter((app) => app.status === 'approved').length
   const schemaReviewCount = schemas.filter((schema) => schema.status === 'pending').length
   const orgStatusCounts = [
     { label: 'Approved', value: approvedCount },
@@ -58,9 +59,12 @@ export default function PlatformDashboardPage() {
         <PlatformTopbar heading="Dashboard" />
         <section className="platform-content">
           <div className="admin-stats-grid">
-            <article className="admin-stat-card blue"><span className="admin-stat-icon"><AdminIcon name="organizations" /></span><strong>{totalOrgs}</strong><h3>Total Orgs</h3><p>{pendingOrgCount} pending</p></article>
-            <article className="admin-stat-card green"><span className="admin-stat-icon"><AdminIcon name="check" /></span><strong>{approvedCount}</strong><h3>Approved</h3><p>active orgs</p></article>
-            <article className="admin-stat-card purple"><span className="admin-stat-icon"><AdminIcon name="applications" /></span><strong>{applications.length}</strong><h3>Applications</h3><p>{pendingAppCount} pending</p></article>
+            <article className="admin-stat-card blue"><span className="admin-stat-icon"><AdminIcon name="organizations" /></span><strong>{totalOrgs}</strong><h3>Total Orgs</h3><p>{approvedCount} approved, {pendingOrgCount} pending</p></article>
+            <article className="admin-stat-card orange"><span className="admin-stat-icon"><AdminIcon name="pending" /></span><strong>{pendingOrgCount}</strong><h3>Pending Orgs</h3><p>awaiting platform approval</p></article>
+            <article className="admin-stat-card green"><span className="admin-stat-icon"><AdminIcon name="check" /></span><strong>{approvedCount}</strong><h3>Approved Orgs</h3><p>active organizations</p></article>
+            <article className="admin-stat-card purple"><span className="admin-stat-icon"><AdminIcon name="applications" /></span><strong>{applications.length}</strong><h3>Total Apps</h3><p>{approvedAppCount} approved, {pendingAppCount} pending</p></article>
+            <article className="admin-stat-card orange"><span className="admin-stat-icon"><AdminIcon name="pending" /></span><strong>{pendingAppCount}</strong><h3>Pending Apps</h3><p>application approvals</p></article>
+            <article className="admin-stat-card green"><span className="admin-stat-icon"><AdminIcon name="check" /></span><strong>{approvedAppCount}</strong><h3>Approved Apps</h3><p>active applications</p></article>
             <article className="admin-stat-card orange"><span className="admin-stat-icon"><AdminIcon name="schema" /></span><strong>{schemaReviewCount}</strong><h3>Schema Reviews</h3><p>awaiting review</p></article>
           </div>
           <div className="admin-chart-grid">
