@@ -44,15 +44,8 @@ interface HostedField {
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080'
-
-const readJsonStorage = <T,>(key: string, fallback: T): T => {
-  try {
-    const raw = localStorage.getItem(key)
-    return raw ? JSON.parse(raw) : fallback
-  } catch {
-    return fallback
-  }
-}
+const ONBOARDING_API_BASE_URL = process.env.NEXT_PUBLIC_ONBOARDING_API_BASE_URL || API_BASE_URL.replace(':8080', ':8081')
+const API_BASE_URLS = Array.from(new Set([API_BASE_URL, ONBOARDING_API_BASE_URL]))
 
 const safeJson = (value: any) => {
   if (!value) return null
@@ -108,12 +101,55 @@ const getLoginFields = (schema?: HostedSchema): HostedField[] => {
   return []
 }
 
-const hostedAppKey = (app: HostedApplication) => app.clientId || app.id || app.internalId || ''
-
 const redirectWithParams = (redirectUri: string, params: Record<string, string>) => {
   const url = new URL(redirectUri)
   Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value))
   window.location.href = url.toString()
+}
+
+const fetchJsonWithTimeout = async (url: string, timeoutMs = 8000) => {
+  const controller = new AbortController()
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetch(url, { signal: controller.signal })
+    const data = await response.json().catch(() => null)
+    return { response, data }
+  } finally {
+    window.clearTimeout(timeout)
+  }
+}
+
+const fetchHostedJson = async (path: string, timeoutMs = 4000) => {
+  let lastError: unknown = null
+  for (const baseUrl of API_BASE_URLS) {
+    try {
+      const result = await fetchJsonWithTimeout(`${baseUrl}${path}`, timeoutMs)
+      if (result.response.ok) return result
+      lastError = new Error(`Request failed: ${result.response.status}`)
+    } catch (error) {
+      lastError = error
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('Identity OS request failed.')
+}
+
+const hostedIdentityRequest = async (path: string, body: Record<string, unknown>) => {
+  let lastError: unknown = null
+  for (const baseUrl of API_BASE_URLS) {
+    try {
+      const response = await fetch(`${baseUrl}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (response.ok) return data
+      lastError = new Error(data.message || data.error || `Request failed: ${response.status}`)
+    } catch (error) {
+      lastError = error
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('Identity OS request failed.')
 }
 
 export default function HostedIdentityPage({ initialClientId = '', initialRedirectUri = '', mode }: HostedIdentityPageProps) {
@@ -122,63 +158,54 @@ export default function HostedIdentityPage({ initialClientId = '', initialRedire
   const [applications, setApplications] = useState<HostedApplication[]>([])
   const [schemas, setSchemas] = useState<HostedSchema[]>([])
   const [formValues, setFormValues] = useState<Record<string, string>>({})
-  const [loading, setLoading] = useState(true)
+  const [queryReady, setQueryReady] = useState(false)
+  const [configurationReady, setConfigurationReady] = useState(false)
   const [message, setMessage] = useState('')
+  const [messageTone, setMessageTone] = useState<'error' | 'success'>('error')
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     setClientId(initialClientId || params.get('client_id') || '')
     setRedirectUri(initialRedirectUri || params.get('redirect_uri') || '')
+    setQueryReady(true)
   }, [initialClientId, initialRedirectUri])
 
   useEffect(() => {
-    const loadHostedData = async () => {
-      setLoading(true)
+    if (!queryReady) return
+    if (!clientId) {
+      setConfigurationReady(true)
+      return
+    }
+    const loadDirectConfiguration = async () => {
+      setConfigurationReady(false)
       setMessage('')
       try {
-        const [appsResponse, schemasResponse] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/v1/onboarding/applications`),
-          fetch(`${API_BASE_URL}/api/v1/onboarding/schemas`),
-        ])
-        const backendApps = appsResponse.ok ? await appsResponse.json() : []
-        const backendSchemas = schemasResponse.ok ? await schemasResponse.json() : []
-        const saved = readJsonStorage<any>('catalogue_state_v1', {})
-        setApplications([
-          ...backendApps.map(normalizeApp),
-          ...(saved.applications || []).map(normalizeApp),
-        ].filter((app, index, all) => all.findIndex((item) => hostedAppKey(item) === hostedAppKey(app)) === index))
-        setSchemas([
-          ...backendSchemas.map(normalizeSchema),
-          ...(saved.schemas || []).map(normalizeSchema),
-        ].filter((schema, index, all) => all.findIndex((item) => (item.versionId || item.id) === (schema.versionId || schema.id)) === index))
-      } catch {
-        const saved = readJsonStorage<any>('catalogue_state_v1', {})
-        setApplications((saved.applications || []).map(normalizeApp))
-        setSchemas((saved.schemas || []).map(normalizeSchema))
+        const appResult = await fetchHostedJson(`/api/v1/onboarding/applications/client/${encodeURIComponent(clientId)}`)
+        if (appResult.response.ok && appResult.data) {
+          const application = normalizeApp(appResult.data)
+          setApplications((prev) => [application, ...prev.filter((item) => item.id !== application.id && item.clientId !== application.clientId)])
+        }
+        if (mode !== 'choice') {
+          const schemaType = mode === 'register' ? 'REGISTRATION' : 'LOGIN'
+          const schemaResult = await fetchHostedJson(`/api/v1/onboarding/identity/schema?clientId=${encodeURIComponent(clientId)}&schemaType=${schemaType}`)
+          if (schemaResult.response.ok && schemaResult.data) {
+            const schema = normalizeSchema(schemaResult.data)
+            setSchemas((prev) => [schema, ...prev.filter((item) => (item.versionId || item.id) !== (schema.versionId || schema.id))])
+          }
+        }
+      } catch (error) {
+        setMessageTone('error')
+        setMessage(error instanceof DOMException && error.name === 'AbortError'
+          ? 'Identity OS configuration lookup timed out. Please check API gateway and onboarding service.'
+          : 'Unable to load Identity OS configuration. Please check API gateway and onboarding service.')
       } finally {
-        setLoading(false)
+        setConfigurationReady(true)
       }
     }
 
-    loadHostedData()
-  }, [])
-
-  useEffect(() => {
-    if (!clientId) return
-    const loadApplication = async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/v1/onboarding/applications/client/${encodeURIComponent(clientId)}`)
-        if (!response.ok) return
-        const application = normalizeApp(await response.json())
-        setApplications((prev) => [application, ...prev.filter((item) => item.id !== application.id && item.clientId !== application.clientId)])
-      } catch {
-        // Keep the list loaded from the bulk endpoint or local state.
-      }
-    }
-
-    loadApplication()
-  }, [clientId])
+    loadDirectConfiguration()
+  }, [clientId, mode, queryReady])
 
   const app = useMemo(() => applications.find((item) => appKeys(item).includes(clientId)), [applications, clientId])
   const callbackUri = redirectUri || app?.redirectUri || ''
@@ -192,57 +219,57 @@ export default function HostedIdentityPage({ initialClientId = '', initialRedire
   const updateField = (name: string, value: string) => setFormValues((prev) => ({ ...prev, [name]: value }))
   const submit = async () => {
     if (!app) {
+      setMessageTone('error')
       setMessage('Application was not found. Use the public application id shown in Identity OS, for example app_xxxxx.')
       return
     }
     if (!callbackUri) {
+      setMessageTone('error')
       setMessage('Redirect URI is missing for this application.')
       return
     }
     const missing = fields.find((field) => field.required && !String(formValues[field.name] || '').trim())
     if (missing) {
+      setMessageTone('error')
       setMessage(`${missing.label || missing.name} is required.`)
       return
     }
     setSubmitting(true)
     setMessage('')
     try {
-      const users = readJsonStorage<Record<string, any[]>>('identity_os_demo_users_v1', {})
-      const appUsers = users[app.id] || []
       const username = formValues.username || formValues.email
 
       if (currentMode === 'register') {
-        if (appUsers.some((user) => user.username === username)) {
-          setMessage('Username already exists for this application.')
-          return
-        }
-        const nextUsers = { ...users, [app.id]: [{ ...formValues, username, createdAt: new Date().toISOString() }, ...appUsers] }
-        localStorage.setItem('identity_os_demo_users_v1', JSON.stringify(nextUsers))
-        redirectWithParams(callbackUri, {
-          registered: 'true',
-          client_id: clientId,
-          username,
+        await hostedIdentityRequest('/api/v1/onboarding/identity/register', {
+          clientId,
+          redirectUri: callbackUri,
+          fields: formValues,
         })
+        setMessageTone('success')
+        setMessage('Registration completed successfully. You can now login with this username and password.')
         return
       }
 
-      const matchedUser = appUsers.find((user) => user.username === formValues.username && user.password === formValues.password)
-      if (!matchedUser) {
-        setMessage('Invalid username or password for this application.')
-        return
-      }
-      redirectWithParams(callbackUri, {
-        access_token: `demo_token_${Date.now()}`,
-        token_type: 'Bearer',
-        client_id: clientId,
-        username: formValues.username,
+      const tokenResponse = await hostedIdentityRequest('/api/v1/onboarding/identity/login', {
+        clientId,
+        redirectUri: callbackUri,
+        fields: formValues,
       })
+      redirectWithParams(callbackUri, {
+        access_token: tokenResponse.accessToken,
+        token_type: tokenResponse.tokenType || 'Bearer',
+        client_id: clientId,
+        username,
+      })
+    } catch (error) {
+      setMessageTone('error')
+      setMessage(error instanceof Error ? error.message : 'Identity OS request failed.')
     } finally {
       setSubmitting(false)
     }
   }
 
-  if (loading) return <div className="hosted-identity-shell"><div className="hosted-card"><p>Loading Identity OS configuration...</p></div></div>
+  if (!queryReady || !configurationReady) return <div className="hosted-identity-shell"><div className="hosted-card"><p>Loading Identity OS configuration...</p></div></div>
 
   if (mode === 'choice') {
     return (
@@ -287,7 +314,7 @@ export default function HostedIdentityPage({ initialClientId = '', initialRedire
                   : <input type={field.type === 'password' ? 'password' : field.type === 'email' ? 'email' : 'text'} value={formValues[field.name] || ''} onChange={(event) => updateField(field.name, event.target.value)} placeholder={field.label || field.name} />}
             </label>
           ))}
-          {message && <div className="hosted-error">{message}</div>}
+          {message && <div className={messageTone === 'success' ? 'hosted-success' : 'hosted-error'}>{message}</div>}
           <button className="primary-button hosted-submit" disabled={submitting || !app || app.status !== 'approved' || schemaMissing || fields.length === 0}>{submitting ? 'Processing...' : currentMode === 'register' ? 'Register and return' : 'Login and return'}</button>
         </form>
         <div className="hosted-footer">Redirect URI: <code>{callbackUri || '-'}</code></div>

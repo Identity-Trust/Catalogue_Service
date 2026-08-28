@@ -24,19 +24,46 @@ const requiredRegistrationFields: Array<{ key: string; label: string }> = [
 ]
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080'
+const ONBOARDING_API_BASE_URL = process.env.NEXT_PUBLIC_ONBOARDING_API_BASE_URL || 'http://localhost:8081'
+const DIRECT_ONBOARDING_READ_PATHS = new Set([
+  '/api/v1/onboarding/organizations',
+  '/api/v1/onboarding/applications',
+  '/api/v1/onboarding/schemas',
+])
+
+const getReadUrls = (path: string) => {
+  const urls = [`/api/catalogue${path}`, `${API_BASE_URL}${path}`]
+  if (ONBOARDING_API_BASE_URL !== API_BASE_URL) urls.push(`${ONBOARDING_API_BASE_URL}${path}`)
+  return urls
+}
 
 const backendRequest = async <TResponse,>(path: string, init?: RequestInit): Promise<TResponse> => {
   if (keycloak.authenticated) {
     await keycloak.updateToken(30)
   }
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const requestInit = {
     ...init,
     headers: {
       'Content-Type': 'application/json',
       ...(keycloak.token ? { Authorization: `Bearer ${keycloak.token}` } : {}),
       ...init?.headers,
     },
-  })
+  }
+  const method = (init?.method || 'GET').toUpperCase()
+  let response: Response | null = null
+  let fetchError: unknown = null
+  const urls = method === 'GET' && DIRECT_ONBOARDING_READ_PATHS.has(path) ? getReadUrls(path) : [`${API_BASE_URL}${path}`]
+  for (const url of urls) {
+    try {
+      response = await fetch(url, requestInit)
+      if (response.ok) break
+    } catch (error) {
+      fetchError = error
+    }
+  }
+  if (!response) {
+    throw fetchError instanceof Error ? fetchError : new Error('Unable to reach backend service')
+  }
   if (!response.ok) {
     const message = await response.text()
     throw new Error(message || `Request failed: ${response.status}`)

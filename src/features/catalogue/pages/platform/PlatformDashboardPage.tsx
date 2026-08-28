@@ -28,6 +28,7 @@ export default function PlatformDashboardPage() {
   ]
   const maxOrgStatus = Math.max(1, ...orgStatusCounts.map((item) => item.value))
   const maxAppStatus = Math.max(1, ...appStatusCounts.map((item) => item.value))
+  const statusClassName = (label: string) => `status-fill status-fill-${label.toLowerCase()}`
   const recentRows = [
     ...organizations.map((org) => ({
       type: 'Org',
@@ -68,8 +69,8 @@ export default function PlatformDashboardPage() {
             <article className="admin-stat-card orange"><span className="admin-stat-icon"><AdminIcon name="schema" /></span><strong>{schemaReviewCount}</strong><h3>Schema Reviews</h3><p>awaiting review</p></article>
           </div>
           <div className="admin-chart-grid">
-            <article className="admin-chart-card"><h2>Organization Approval Status</h2><div className="status-chart">{orgStatusCounts.map((item) => <div className="status-bar-row" key={item.label}><span>{item.label}</span><div><strong style={{ width: `${(item.value / maxOrgStatus) * 100}%` }} /></div><b>{item.value}</b></div>)}</div></article>
-            <article className="admin-chart-card"><h2>Application Approval Status</h2><div className="status-chart">{appStatusCounts.map((item) => <div className="status-bar-row" key={item.label}><span>{item.label}</span><div><strong style={{ width: `${(item.value / maxAppStatus) * 100}%` }} /></div><b>{item.value}</b></div>)}</div></article>
+            <article className="admin-chart-card"><h2>Organization Approval Status</h2><div className="status-chart">{orgStatusCounts.map((item) => <div className="status-bar-row" key={item.label}><span>{item.label}</span><div><strong className={statusClassName(item.label)} style={{ width: `${(item.value / maxOrgStatus) * 100}%` }} /></div><b>{item.value}</b></div>)}</div></article>
+            <article className="admin-chart-card"><h2>Application Approval Status</h2><div className="status-chart">{appStatusCounts.map((item) => <div className="status-bar-row" key={item.label}><span>{item.label}</span><div><strong className={statusClassName(item.label)} style={{ width: `${(item.value / maxAppStatus) * 100}%` }} /></div><b>{item.value}</b></div>)}</div></article>
           </div>
           <section className="recent-activity-card"><h2>Recent Records</h2>{recentRows.length ? <div className="recent-activity-list">{recentRows.map((row) => <div className="recent-activity-row" key={`${row.type}-${row.text}-${row.meta}`}><span className={`activity-dot ${row.dot}`} /><span className="activity-type">{row.type}</span><strong>{row.text}</strong><span className="activity-meta">{row.meta}</span><time>{row.time || 'Synced'}</time></div>)}</div> : <div className="empty-state">No organization, application, or schema records found from the database yet.</div>}</section>
         </section>
