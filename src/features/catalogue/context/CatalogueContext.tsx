@@ -52,7 +52,12 @@ const backendRequest = async <TResponse,>(path: string, init?: RequestInit): Pro
   const method = (init?.method || 'GET').toUpperCase()
   let response: Response | null = null
   let fetchError: unknown = null
-  const urls = method === 'GET' && DIRECT_ONBOARDING_READ_PATHS.has(path) ? getReadUrls(path) : [`${API_BASE_URL}${path}`]
+  const isOnboardingPath = path.startsWith('/api/v1/onboarding/')
+  const urls = method === 'GET' && DIRECT_ONBOARDING_READ_PATHS.has(path)
+    ? getReadUrls(path)
+    : isOnboardingPath
+      ? getReadUrls(path)
+      : [`${API_BASE_URL}${path}`]
   for (const url of urls) {
     try {
       response = await fetch(url, requestInit)
@@ -336,9 +341,8 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
     setRegistrationSubmitting(true)
     setRegistrationError('')
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080'}/api/v1/onboarding/organizations`, {
+      const data = await backendRequest<any>('/api/v1/onboarding/organizations', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           organizationName: registrationForm.name,
           organizationType: registrationForm.type,
@@ -366,8 +370,6 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
           addressProofRef: registrationForm.addressProofRef,
         }),
       })
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.message || 'Registration failed.')
 
       const nextSuccessData = {
         orgId: data.organizationId,
