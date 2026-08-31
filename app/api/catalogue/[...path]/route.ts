@@ -4,6 +4,10 @@ const ONBOARDING_API_BASE_URL =
   process.env.ONBOARDING_API_BASE_URL ||
   process.env.NEXT_PUBLIC_ONBOARDING_API_BASE_URL ||
   'http://localhost:8081'
+const AUTH_API_BASE_URL =
+  process.env.AUTH_API_BASE_URL ||
+  process.env.NEXT_PUBLIC_AUTH_API_BASE_URL ||
+  'http://localhost:8082'
 
 interface RouteContext {
   params: Promise<{ path: string[] }>
@@ -25,11 +29,14 @@ async function proxyOnboardingRequest(request: NextRequest, context: RouteContex
   const { path } = await context.params
   const upstreamPath = path.join('/')
 
-  if (!upstreamPath.startsWith('api/v1/onboarding/')) {
+  const isOnboardingPath = upstreamPath.startsWith('api/v1/onboarding/')
+  const isAuthPath = upstreamPath.startsWith('api/v1/auth/')
+  if (!isOnboardingPath && !isAuthPath) {
     return NextResponse.json({ message: 'Unsupported catalogue route' }, { status: 404 })
   }
 
-  const target = new URL(`${ONBOARDING_API_BASE_URL.replace(/\/$/, '')}/${upstreamPath}`)
+  const baseUrl = isAuthPath ? AUTH_API_BASE_URL : ONBOARDING_API_BASE_URL
+  const target = new URL(`${baseUrl.replace(/\/$/, '')}/${upstreamPath}`)
   request.nextUrl.searchParams.forEach((value, key) => target.searchParams.set(key, value))
 
   try {
@@ -54,6 +61,7 @@ async function proxyOnboardingRequest(request: NextRequest, context: RouteContex
       },
     })
   } catch {
-    return NextResponse.json({ message: 'Unable to reach onboarding service' }, { status: 502 })
+    const serviceName = isAuthPath ? 'authentication service' : 'onboarding service'
+    return NextResponse.json({ message: `Unable to reach ${serviceName}` }, { status: 502 })
   }
 }

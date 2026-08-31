@@ -25,6 +25,7 @@ const requiredRegistrationFields: Array<{ key: string; label: string }> = [
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080'
 const ONBOARDING_API_BASE_URL = process.env.NEXT_PUBLIC_ONBOARDING_API_BASE_URL || 'http://localhost:8081'
+const AUTH_API_BASE_URL = process.env.NEXT_PUBLIC_AUTH_API_BASE_URL || 'http://localhost:8082'
 const DIRECT_ONBOARDING_READ_PATHS = new Set([
   '/api/v1/onboarding/organizations',
   '/api/v1/onboarding/applications',
@@ -34,6 +35,13 @@ const DIRECT_ONBOARDING_READ_PATHS = new Set([
 const getReadUrls = (path: string) => {
   const urls = [`/api/catalogue${path}`, `${API_BASE_URL}${path}`]
   if (ONBOARDING_API_BASE_URL !== API_BASE_URL) urls.push(`${ONBOARDING_API_BASE_URL}${path}`)
+  return urls
+}
+
+const getServiceUrls = (path: string) => {
+  const urls = [`/api/catalogue${path}`, `${API_BASE_URL}${path}`]
+  const directBaseUrl = path.startsWith('/api/v1/auth/') ? AUTH_API_BASE_URL : ONBOARDING_API_BASE_URL
+  if (directBaseUrl !== API_BASE_URL) urls.push(`${directBaseUrl}${path}`)
   return urls
 }
 
@@ -53,10 +61,11 @@ const backendRequest = async <TResponse,>(path: string, init?: RequestInit): Pro
   let response: Response | null = null
   let fetchError: unknown = null
   const isOnboardingPath = path.startsWith('/api/v1/onboarding/')
+  const isAuthPath = path.startsWith('/api/v1/auth/')
   const urls = method === 'GET' && DIRECT_ONBOARDING_READ_PATHS.has(path)
     ? getReadUrls(path)
-    : isOnboardingPath
-      ? getReadUrls(path)
+    : isOnboardingPath || isAuthPath
+      ? getServiceUrls(path)
       : [`${API_BASE_URL}${path}`]
   for (const url of urls) {
     try {
@@ -578,9 +587,8 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
   const handleOrgLoginSubmit = async () => {
     if (orgLoginStage === 1) {
       try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080'}/api/v1/auth/organization/${encodeURIComponent(orgLoginId)}/status`)
-        const data = await response.json()
-        if (!response.ok || !data.success) {
+        const data = await backendRequest<any>(`/api/v1/auth/organization/${encodeURIComponent(orgLoginId)}/status`)
+        if (!data.success) {
           setOrgLoginError(data.message || 'Organization ID not found or not yet approved.')
           return
         }
@@ -594,13 +602,11 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
     }
     if (orgLoginStage === 2) {
       try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080'}/api/v1/auth/organization/otp/request`, {
+        const data = await backendRequest<any>('/api/v1/auth/organization/otp/request', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ organizationId: orgLoginId }),
         })
-        const data = await response.json()
-        if (!response.ok || !data.success) {
+        if (!data.success) {
           setOrgLoginError(data.message || 'Unable to send OTP.')
           return
         }
@@ -613,13 +619,11 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
       return
     }
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080'}/api/v1/auth/organization/otp/verify`, {
+      const data = await backendRequest<any>('/api/v1/auth/organization/otp/verify', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ organizationId: orgLoginId, otp: orgOtp }),
       })
-      const data = await response.json()
-      if (!response.ok || !data.success) {
+      if (!data.success) {
         setOrgLoginError(data.message || 'Invalid OTP.')
         return
       }
