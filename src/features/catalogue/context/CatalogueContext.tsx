@@ -45,6 +45,20 @@ const getServiceUrls = (path: string) => {
   return urls
 }
 
+const hasProfileDetails = (org: Organization | null) =>
+  Boolean(
+    org?.representative?.name ||
+    org?.representative?.email ||
+    org?.representative?.mobile ||
+    org?.representative?.designation ||
+    org?.representative?.employeeId ||
+    org?.address ||
+    org?.addressDetails?.line1 ||
+    org?.addressDetails?.city ||
+    org?.addressDetails?.state ||
+    org?.addressDetails?.postalCode
+  )
+
 const backendRequest = async <TResponse,>(path: string, init?: RequestInit): Promise<TResponse> => {
   if (keycloak.authenticated) {
     await keycloak.updateToken(30)
@@ -135,7 +149,16 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
   const [orgsFilter, setOrgsFilter] = useState('All')
   const [orgApprovalModal, setOrgApprovalModal] = useState<ApprovalModal | null>(null)
   const [orgLoginStage, setOrgLoginStage] = useState(1)
-  const [orgLoginId, setOrgLoginId] = useState('')
+  const [orgLoginId, setOrgLoginIdState] = useState(() => {
+    try {
+      const activeOrgId = readStorage('catalogue_active_org_id_v1')
+      if (activeOrgId) return activeOrgId
+      const lastRegistration = readStorage('catalogue_last_registration_v1')
+      return lastRegistration ? JSON.parse(lastRegistration)?.orgId || '' : ''
+    } catch {
+      return ''
+    }
+  })
   const [orgLoginChannel, setOrgLoginChannel] = useState('email')
   const [orgOtp, setOrgOtp] = useState('')
   const [orgLoginError, setOrgLoginError] = useState('')
@@ -160,6 +183,11 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
   const [confirmProcessing, setConfirmProcessing] = useState(false)
   const refreshInFlight = useRef<Promise<void> | null>(null)
 
+  const setOrgLoginId = (value: string) => {
+    setOrgLoginIdState(value)
+    if (value) writeStorage('catalogue_active_org_id_v1', value)
+  }
+
   useEffect(() => setCurrentView(initialView), [initialView])
 
   const setView = (nextView: CatalogueView) => {
@@ -180,21 +208,76 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
     return savedOrg && approvedOrg ? { ...savedOrg, ...approvedOrg } : savedOrg || approvedOrg || null
   }, [authenticatedOrgId, authenticatedOrgProfile, approvedOrganizations, organizations, orgLoginId])
 
-  const mapOrganizationProfile = (profile: any): Organization => ({
-    id: profile.organizationId,
-    name: profile.organizationName,
-    type: profile.organizationType,
-    country: profile.countryCode,
-    email: profile.officialEmail,
-    phone: profile.officialPhone,
-    website: profile.websiteUrl,
-    status: profile.approvalStatus || profile.status || 'ACTIVE',
-    registrationType: profile.verificationIdType,
-    registrationDetails: {
-      registrationNumber: profile.registrationNumber || profile.verificationId || '',
-      gst: profile.verificationId,
-    },
-  })
+  const mapOrganizationProfile = (profile: any): Organization => {
+    const representativeName = [profile.representativeFirstName, profile.representativeLastName].filter(Boolean).join(' ').trim()
+    const addressParts = [
+      profile.addressLine1,
+      profile.addressLine2,
+      profile.city,
+      profile.district,
+      profile.state,
+      profile.postalCode,
+      profile.addressCountryCode,
+    ].filter(Boolean)
+
+    return {
+      id: profile.organizationId,
+      name: profile.organizationName,
+      type: profile.organizationType,
+      country: profile.countryCode,
+      email: profile.officialEmail,
+      phone: profile.officialPhone,
+      address: addressParts.join(', '),
+      addressDetails: {
+        type: profile.addressType,
+        line1: profile.addressLine1,
+        line2: profile.addressLine2,
+        city: profile.city,
+        district: profile.district,
+        state: profile.state,
+        postalCode: profile.postalCode,
+        country: profile.addressCountryCode,
+        proofRef: profile.addressProofRef,
+      },
+      website: profile.websiteUrl,
+      status: profile.approvalStatus || profile.status || 'ACTIVE',
+      registrationType: profile.verificationIdType,
+      registrationDetails: {
+        registrationNumber: profile.registrationNumber || profile.verificationId || '',
+        gst: profile.verificationId,
+        authority: profile.registrationAuthority,
+        verificationStatus: profile.verificationIdVerifyStatus,
+      },
+      representative: {
+        name: representativeName,
+        email: profile.representativeEmail,
+        mobile: profile.representativeMobileNumber,
+        designation: profile.representativeDesignation,
+        employeeId: profile.representativeEmployeeId,
+      },
+    }
+  }
+
+  useEffect(() => {
+    const organizationId = currentOrg?.id || authenticatedOrgId || orgLoginId
+    if (!organizationId || hasProfileDetails(currentOrg)) return
+
+    const loadDetailedProfile = async () => {
+      try {
+        const profile = await backendRequest<any>(`/api/v1/onboarding/organizations/${encodeURIComponent(organizationId)}/profile`)
+        const mappedProfile = mapOrganizationProfile(profile)
+        setAuthenticatedOrgProfile(mappedProfile)
+        writeStorage('catalogue_active_org_id_v1', mappedProfile.id)
+        setOrganizations((prev) => prev.some((org) => org.id === mappedProfile.id)
+          ? prev.map((org) => org.id === mappedProfile.id ? { ...org, ...mappedProfile } : org)
+          : [mappedProfile, ...prev])
+      } catch {
+        // Keep the available organization shell if the detailed profile is temporarily unavailable.
+      }
+    }
+
+    loadDetailedProfile()
+  }, [authenticatedOrgId, currentOrg?.addressDetails, currentOrg?.id, currentOrg?.representative, orgLoginId])
 
   const mapBackendApplication = (app: any): ApplicationRecord => ({
     id: app.applicationId,
@@ -294,15 +377,9 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
 
     const loadProfile = async () => {
       try {
-        await keycloak.updateToken(30)
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080'}/api/v1/onboarding/organizations/${encodeURIComponent(nextOrgId)}`, {
-          headers: {
-            Authorization: `Bearer ${keycloak.token}`,
-          },
-        })
-        if (!response.ok) return
-        const profile = await response.json()
+        const profile = await backendRequest<any>(`/api/v1/onboarding/organizations/${encodeURIComponent(nextOrgId)}/profile`)
         setAuthenticatedOrgProfile(mapOrganizationProfile(profile))
+        writeStorage('catalogue_active_org_id_v1', nextOrgId)
       } catch {
         // Keep the token organization id even when the profile endpoint is temporarily unavailable.
       }
@@ -594,6 +671,7 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
         }
         setOrgLoginMaskedEmail(data.maskedEmail || '')
         setOrgLoginError('')
+        writeStorage('catalogue_active_org_id_v1', orgLoginId)
         setOrgLoginStage(2)
       } catch {
         setOrgLoginError('Unable to check organization status. Please try again.')

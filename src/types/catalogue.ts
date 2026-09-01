@@ -1,6 +1,8 @@
 export interface RegistrationDetails {
   registrationNumber: string
   gst?: string
+  authority?: string
+  verificationStatus?: string
 }
 
 export interface Representative {
@@ -8,6 +10,19 @@ export interface Representative {
   email: string
   mobile: string
   designation: string
+  employeeId?: string
+}
+
+export interface OrganizationAddress {
+  type?: string
+  line1?: string
+  line2?: string
+  city?: string
+  district?: string
+  state?: string
+  postalCode?: string
+  country?: string
+  proofRef?: string
 }
 
 export interface RegistrationField {
@@ -31,6 +46,7 @@ export interface Organization {
   email?: string
   phone?: string
   address?: string
+  addressDetails?: OrganizationAddress
   website?: string
   domain?: string
   registrationType?: string
