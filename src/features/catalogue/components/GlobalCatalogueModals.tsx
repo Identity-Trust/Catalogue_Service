@@ -1,6 +1,7 @@
 'use client'
 
 import type React from 'react'
+import { createPortal } from 'react-dom'
 import { AdminIcon } from '../../../components/ui'
 import type { ApplicationRecord, Organization, SchemaRecord } from '../../../types/catalogue'
 import { useCatalogue } from '../context/CatalogueContext'
@@ -14,7 +15,7 @@ export default function GlobalCatalogueModals() {
     setOrgApprovalModal, setOrganizations, setPolicyPreviewModal, setPublishModal, setRequestModal, setSchemas,
   } = ctx
 
-  return (
+  const modals = (
     <>
       {orgApprovalModal && <ApprovalModal item={orgApprovalModal.item} type={orgApprovalModal.type} onClose={() => setOrgApprovalModal(null)} onConfirm={setConfirmModal} actions={{ addAudit, approveApplication, approveOrganization, approveSchema, rejectOrganization, rejectSchema, requestMoreInfo, setPolicyPreviewModal, setRequestModal }} />}
       {appCredentialModal && <AppCredentialModal data={appCredentialModal} onClose={() => setAppCredentialModal(null)} />}
@@ -25,6 +26,8 @@ export default function GlobalCatalogueModals() {
       {requestModal && <RequestMoreInfoModal data={requestModal} onClose={() => setRequestModal(null)} setRequestModal={setRequestModal} requestMoreInfo={requestMoreInfo} addAudit={addAudit} />}
     </>
   )
+
+  return typeof document === 'undefined' ? null : createPortal(modals, document.body)
 }
 
 function ModalShell({ children, icon, onClose, title, wide = false }: { children: React.ReactNode; icon?: string; onClose: () => void; title: string; wide?: boolean }) {
