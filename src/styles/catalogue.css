@@ -1476,6 +1476,60 @@ textarea {
   color: #13233f;
 }
 
+.schema-policy-card {
+  align-items: flex-start;
+}
+
+.schema-policy-card > div:first-child {
+  width: 100%;
+}
+
+.dpdp-policy-box {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #f4c78b;
+  background: #fff8eb;
+  color: #78350f;
+}
+
+.dpdp-policy-box.passed {
+  border-color: #a9e7cf;
+  background: #f0fdf4;
+  color: #065f46;
+}
+
+.dpdp-policy-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.dpdp-policy-heading small {
+  color: #64748b;
+  font-weight: 800;
+}
+
+.dpdp-policy-box p {
+  margin: 6px 0 0;
+  color: inherit;
+  font-weight: 700;
+}
+
+.dpdp-policy-box ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: inherit;
+}
+
+.dpdp-policy-box li {
+  margin: 4px 0;
+  font-weight: 700;
+}
+
 .platform-dashboard-main h4 {
   color: #13233f;
 }
@@ -3129,6 +3183,79 @@ textarea {
   border-color: #f6d58a;
   background: #fffbeb;
   color: #92400e;
+}
+
+.org-console-main .dpdp-builder-card {
+  margin: 14px 0;
+  padding: 16px;
+  border: 1px solid #cfe0f5;
+  background: #ffffff;
+  color: #13233f;
+}
+
+.dpdp-builder-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.dpdp-builder-heading p {
+  margin: 0;
+  max-width: 760px;
+  color: #5d6f8a;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.dpdp-builder-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(180px, 0.7fr);
+  gap: 12px;
+}
+
+.dpdp-builder-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  color: #24364f;
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0;
+}
+
+.dpdp-builder-grid label.full {
+  grid-column: 1 / -1;
+}
+
+.dpdp-builder-grid input,
+.dpdp-builder-grid textarea {
+  width: 100%;
+  border: 1px solid #cbd7e6;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #10233f;
+}
+
+.dpdp-builder-grid textarea {
+  resize: vertical;
+}
+
+.dpdp-builder-grid .dpdp-consent-toggle {
+  flex-direction: row;
+  align-items: center;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid #cbd7e6;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.dpdp-builder-grid .dpdp-consent-toggle input {
+  width: 16px;
+  height: 16px;
 }
 
 .org-console-main .builder-palette.form-card,
