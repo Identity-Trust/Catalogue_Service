@@ -697,6 +697,19 @@ textarea {
   gap: 0 16px;
 }
 
+.registration-card .step-row label,
+.registration-card .split-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #b9d7ff;
+  font-size: 0.74rem;
+  line-height: 1.2;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .registration-card .step-row,
 .registration-card .split-row,
 .registration-card .error-message,
@@ -1618,6 +1631,56 @@ textarea {
   flex-wrap: wrap;
   justify-content: flex-end;
   flex: 0 0 auto;
+}
+
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+  padding: 14px 16px;
+  border: 1px solid #dce4ef;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #13233f;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+}
+
+.pagination-summary {
+  margin-right: auto;
+  color: #5f718c;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.page-size-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #60708e;
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.page-size-control select {
+  min-width: 82px;
+}
+
+.pagination-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.pagination-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .icon-text-button,

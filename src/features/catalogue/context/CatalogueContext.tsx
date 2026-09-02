@@ -393,9 +393,25 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
   }
 
   const updateRegistrationField = (field: keyof typeof registrationForm, value: string) => setRegistrationForm((prev) => ({ ...prev, [field]: value }))
+  const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
+  const mobileDigitCount = (value: string) => value.replace(/\D/g, '').length
+  const isValidMobile = (value: string) => /^\+?[0-9][0-9\s-]{6,18}$/.test(value.trim()) && mobileDigitCount(value) >= 7 && mobileDigitCount(value) <= 15
+  const isValidRegistrationNumber = (value: string) => /^[A-Za-z0-9/-]{3,30}$/.test(value.trim())
+  const isValidDesignation = (value: string) => !value.trim() || /^[A-Za-z ]{2,60}$/.test(value.trim())
+  const isValidWebsite = (value: string) => {
+    const trimmed = value.trim()
+    if (!trimmed) return true
+    try {
+      const url = new URL(trimmed.startsWith('http') ? trimmed : `https://${trimmed}`)
+      return Boolean(url.hostname.includes('.'))
+    } catch {
+      return false
+    }
+  }
+
   const validateRegistrationStep = (targetStep = step) => {
     const stepFields: Record<number, string[]> = {
-      0: ['name', 'type', 'country', 'email'],
+      0: ['name', 'type', 'country', 'email', 'phone'],
       1: ['gst'],
       2: ['repName', 'repEmail'],
       3: ['address', 'city', 'state', 'postalCode'],
@@ -406,6 +422,34 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
       .find((field) => !String(registrationForm[field.key as keyof typeof registrationForm] || '').trim())
     if (missing) {
       setRegistrationError(`${missing.label} is required.`)
+      return false
+    }
+    if (targetStep === 0 && !isValidEmail(registrationForm.email)) {
+      setRegistrationError('Enter a valid official email address.')
+      return false
+    }
+    if (targetStep === 0 && !isValidMobile(registrationForm.phone)) {
+      setRegistrationError('Enter a valid official phone number with 7 to 15 digits.')
+      return false
+    }
+    if (targetStep === 1 && !isValidRegistrationNumber(registrationForm.gst)) {
+      setRegistrationError('Registration number must be 3 to 30 characters and use only letters, numbers, slash, or hyphen.')
+      return false
+    }
+    if (targetStep === 2 && !isValidEmail(registrationForm.repEmail)) {
+      setRegistrationError('Enter a valid representative email address.')
+      return false
+    }
+    if (targetStep === 2 && registrationForm.repMobile && !isValidMobile(registrationForm.repMobile)) {
+      setRegistrationError('Enter a valid representative mobile number with 7 to 15 digits.')
+      return false
+    }
+    if (targetStep === 2 && !isValidDesignation(registrationForm.designation)) {
+      setRegistrationError('Designation must contain only A-Z letters and spaces.')
+      return false
+    }
+    if (targetStep === 4 && !isValidWebsite(registrationForm.website)) {
+      setRegistrationError('Enter a valid website URL or domain.')
       return false
     }
     setRegistrationError('')
@@ -419,7 +463,7 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
   const previousStep = () => setStep((prev) => Math.max(prev - 1, 0))
 
   const submitRegistration = async () => {
-    const firstInvalid = [0, 1, 2, 3].find((targetStep) => !validateRegistrationStep(targetStep))
+    const firstInvalid = [0, 1, 2, 3, 4].find((targetStep) => !validateRegistrationStep(targetStep))
     if (firstInvalid !== undefined) {
       setStep(firstInvalid)
       return
