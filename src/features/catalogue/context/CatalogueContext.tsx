@@ -182,6 +182,7 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
   const [confirmModal, setConfirmModal] = useState<ConfirmModal | null>(null)
   const [confirmProcessing, setConfirmProcessing] = useState(false)
   const refreshInFlight = useRef<Promise<void> | null>(null)
+  const profileLoadAttempted = useRef<Set<string>>(new Set())
 
   const setOrgLoginId = (value: string) => {
     setOrgLoginIdState(value)
@@ -260,7 +261,8 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
 
   useEffect(() => {
     const organizationId = currentOrg?.id || authenticatedOrgId || orgLoginId
-    if (!organizationId || hasProfileDetails(currentOrg)) return
+    if (!organizationId || hasProfileDetails(currentOrg) || profileLoadAttempted.current.has(organizationId)) return
+    profileLoadAttempted.current.add(organizationId)
 
     const loadDetailedProfile = async () => {
       try {

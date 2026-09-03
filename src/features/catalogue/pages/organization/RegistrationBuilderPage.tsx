@@ -27,6 +27,10 @@ export default function RegistrationBuilderPage() {
   })
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [schemaName, setSchemaName] = useState(() => readStorage('registration_builder_schema_name') || 'Customer Registration')
+  const [dpdpPurpose, setDpdpPurpose] = useState(() => readStorage('registration_builder_dpdp_purpose') || '')
+  const [dpdpConsentRequired, setDpdpConsentRequired] = useState(() => readStorage('registration_builder_dpdp_consent') === 'true')
+  const [dpdpRetentionDays, setDpdpRetentionDays] = useState(() => readStorage('registration_builder_dpdp_retention_days') || '')
+  const [dpdpJustification, setDpdpJustification] = useState(() => readStorage('registration_builder_dpdp_justification') || '')
   const [selectedAppId, setSelectedAppId] = useState(() => orgApps[0]?.id || '')
   const [message, setMessage] = useState('')
   const [saving, setSaving] = useState(false)
@@ -39,6 +43,21 @@ export default function RegistrationBuilderPage() {
   const updateField = (idx: number, patch: Partial<RegistrationField>) => persist(fields.map((field, index) => index === idx ? { ...field, ...patch } : field))
   const removeField = (idx: number) => { const next = fields.filter((_, index) => index !== idx); persist(next); setSelectedIndex(Math.max(0, Math.min(selectedIndex, next.length - 1))) }
   const moveUp = (idx: number) => { if (idx === 0) return; const copy = [...fields]; [copy[idx - 1], copy[idx]] = [copy[idx], copy[idx - 1]]; persist(copy); setSelectedIndex(idx - 1) }
+  const schemaJson = {
+    registrationFields: fields,
+    purpose: dpdpPurpose,
+    consentRequired: dpdpConsentRequired,
+    retentionDays: Number(dpdpRetentionDays) || null,
+    sensitiveDataJustification: dpdpJustification,
+  }
+  const configurationJson = {
+    layout: 'single-page',
+    versionedBy: 'organization-admin',
+    purpose: dpdpPurpose,
+    consentRequired: dpdpConsentRequired,
+    retentionDays: Number(dpdpRetentionDays) || null,
+    sensitiveDataJustification: dpdpJustification,
+  }
   const submitSchema = async (submitForApproval: boolean) => {
     if (!selectedAppId) { setMessage('Select an approved application first.'); return }
     setSaving(true)
@@ -48,13 +67,17 @@ export default function RegistrationBuilderPage() {
         applicationId: selectedAppId,
         schemaType: 'REGISTRATION',
         schemaName,
-        schemaJson: { registrationFields: fields },
-        configurationJson: { layout: 'single-page', versionedBy: 'organization-admin' },
+        schemaJson,
+        configurationJson,
         changeSummary: submitForApproval ? 'Submitted registration page schema for approval' : 'Saved registration page draft',
         submitForApproval,
       })
       await refreshCatalogueData?.()
       localStorage.setItem('registration_builder_schema_name', schemaName)
+      localStorage.setItem('registration_builder_dpdp_purpose', dpdpPurpose)
+      localStorage.setItem('registration_builder_dpdp_consent', String(dpdpConsentRequired))
+      localStorage.setItem('registration_builder_dpdp_retention_days', dpdpRetentionDays)
+      localStorage.setItem('registration_builder_dpdp_justification', dpdpJustification)
       setStatusFilter(submitForApproval ? 'Pending' : 'All')
       setMessage(submitForApproval ? 'Registration schema submitted for platform approval.' : 'Registration schema draft saved.')
     } catch (error) {
@@ -81,10 +104,22 @@ export default function RegistrationBuilderPage() {
             <label>Application<select value={selectedAppId} onChange={(event) => setSelectedAppId(event.target.value)}><option value="">Select application</option>{orgApps.map((app) => <option key={app.id} value={app.id}>{app.name} - {app.id}</option>)}</select></label>
             <label>Schema Name<input value={schemaName} onChange={(event) => setSchemaName(event.target.value)} /></label>
           </div>
+          <section className="dpdp-builder-card form-card">
+            <div className="dpdp-builder-heading">
+              <span className="status-pill-ui status-pending"><AdminIcon name="pending" />DPDP Compliance</span>
+              <p>Required when registration fields collect sensitive identity data such as Aadhaar, PAN, DOB, passport, address, or biometric data.</p>
+            </div>
+            <div className="dpdp-builder-grid">
+              <label>Processing Purpose<input value={dpdpPurpose} onChange={(event) => setDpdpPurpose(event.target.value)} placeholder="identity_verification, employee_onboarding, account_creation" /></label>
+              <label>Retention Period Days<input type="number" min="1" max="365" value={dpdpRetentionDays} onChange={(event) => setDpdpRetentionDays(event.target.value)} placeholder="180" /></label>
+              <label className="dpdp-consent-toggle"><input type="checkbox" checked={dpdpConsentRequired} onChange={(event) => setDpdpConsentRequired(event.target.checked)} /> Explicit user consent required</label>
+              <label className="full">Sensitive Data Justification<textarea value={dpdpJustification} onChange={(event) => setDpdpJustification(event.target.value)} placeholder="Explain why sensitive identity data is required for this application." rows={3} /></label>
+            </div>
+          </section>
           {message && <div className="builder-message">{message}</div>}
           <div className="builder-grid schema-builder-grid">
             <div className="builder-palette form-card"><h4>Available Fields</h4>{fieldTypes.map((type) => <button key={type} className="ghost-button icon-text-button" draggable onDragStart={(event) => event.dataTransfer.setData('text/plain', type)} onClick={() => addField(type)}><AdminIcon name="schema" />{type}</button>)}</div>
-            <div className="builder-preview form-card" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const type = event.dataTransfer.getData('text/plain'); if (type) addField(type) }}><h4>Live Registration Preview</h4><form>{fields.map((field, index) => <div key={field.name} className={`field-row ${selectedIndex === index ? 'selected' : ''}`} onClick={() => setSelectedIndex(index)}><span className="drag-handle" title="Drag to reorder" /><div className="control-wrap" style={{flex:1}}><div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}><label style={{ display: 'block', fontSize: 12, opacity: 0.9, fontWeight:600 }}>{field.label}{field.required ? ' *' : ''}</label><span className="field-type-chip">{(field.type || 'text').toUpperCase()}</span></div>{field.type === 'dropdown' ? <select>{(field.options || ['Option 1']).map((option, optionIndex) => <option key={optionIndex}>{option}</option>)}</select> : field.type === 'checkbox' ? <input type="checkbox" /> : <input placeholder={field.label} />}</div></div>)}</form><div className="json-preview"><h5>Generated JSON</h5><pre>{JSON.stringify({ registrationFields: fields }, null, 2)}</pre></div></div>
+            <div className="builder-preview form-card" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const type = event.dataTransfer.getData('text/plain'); if (type) addField(type) }}><h4>Live Registration Preview</h4><form>{fields.map((field, index) => <div key={field.name} className={`field-row ${selectedIndex === index ? 'selected' : ''}`} onClick={() => setSelectedIndex(index)}><span className="drag-handle" title="Drag to reorder" /><div className="control-wrap" style={{flex:1}}><div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}><label style={{ display: 'block', fontSize: 12, opacity: 0.9, fontWeight:600 }}>{field.label}{field.required ? ' *' : ''}</label><span className="field-type-chip">{(field.type || 'text').toUpperCase()}</span></div>{field.type === 'dropdown' ? <select>{(field.options || ['Option 1']).map((option, optionIndex) => <option key={optionIndex}>{option}</option>)}</select> : field.type === 'checkbox' ? <input type="checkbox" /> : <input placeholder={field.label} />}</div></div>)}</form><div className="json-preview"><h5>Generated JSON</h5><pre>{JSON.stringify(schemaJson, null, 2)}</pre></div></div>
             <div className="builder-config form-card"><h4>Field Configuration</h4>{fields.length === 0 ? <p>No fields. Add one from left.</p> : <><div className="field-chip-list">{fields.map((field, idx) => <button key={field.name} className={`ghost-button ${selectedIndex === idx ? 'active' : ''}`} onClick={() => setSelectedIndex(idx)}>{field.label}</button>)}</div><div className="field-config-form"><label>Field Label<input value={fields[selectedIndex]?.label || ''} onChange={(event) => updateField(selectedIndex, { label: event.target.value })} /></label><label>Field Name<input value={fields[selectedIndex]?.name || ''} onChange={(event) => updateField(selectedIndex, { name: event.target.value })} /></label><label>Required<select value={fields[selectedIndex]?.required ? 'yes' : 'no'} onChange={(event) => updateField(selectedIndex, { required: event.target.value === 'yes' })}><option value="no">Optional</option><option value="yes">Required</option></select></label>{fields[selectedIndex]?.type === 'dropdown' && <label>Dropdown Options<textarea value={(fields[selectedIndex]?.options || []).join('\n')} onChange={(event) => updateField(selectedIndex, { options: parseDropdownOptions(event.target.value) })} placeholder="One option per line, or comma separated" rows={5} /></label>}<div className="field-action-row"><button className="secondary-button" onClick={() => moveUp(selectedIndex)}>Move Up</button><button className="secondary-button danger-button" onClick={() => removeField(selectedIndex)}>Remove</button></div></div></>}</div>
           </div>
           <section className="schema-history-panel">
