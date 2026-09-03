@@ -3348,6 +3348,122 @@ textarea {
   height: 16px;
 }
 
+.dpdp-apply-button {
+  width: fit-content;
+  min-height: 40px;
+}
+
+.dpdp-sensitive-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+  color: #475569;
+  font-size: 12px;
+}
+
+.dpdp-sensitive-summary strong {
+  color: #10233f;
+}
+
+.dpdp-sensitive-summary span {
+  padding: 5px 8px;
+  border: 1px solid #dbe7f5;
+  border-radius: 7px;
+  background: #f8fbff;
+}
+
+.field-type-chip.dpdp-chip {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.field-dpdp-preview {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.field-dpdp-preview span {
+  padding: 4px 7px;
+  border: 1px solid #dbe7f5;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #40546e;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.field-dpdp-config {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid #dbe7f5;
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.field-dpdp-config textarea {
+  min-height: 86px;
+  margin: 0;
+  border: 1px solid #cbd7e6;
+  background: #ffffff;
+  color: #10233f;
+}
+
+.preview-dpdp-summary {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #dbe7f5;
+  border-radius: 10px;
+  background: #f8fbff;
+  color: #334155;
+}
+
+.preview-dpdp-summary h4 {
+  margin: 0;
+  color: #13233f;
+}
+
+.preview-dpdp-summary p {
+  margin: 0;
+  color: #64748b;
+}
+
+.preview-dpdp-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) repeat(3, minmax(120px, auto));
+  gap: 8px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.preview-dpdp-row strong {
+  color: #10233f;
+}
+
+.preview-dpdp-row span,
+.preview-dpdp-row small {
+  color: #475569;
+  font-weight: 750;
+}
+
+.preview-dpdp-row small {
+  grid-column: 1 / -1;
+  font-size: 12px;
+}
+
 .org-console-main .builder-palette.form-card,
 .org-console-main .builder-preview.form-card,
 .org-console-main .builder-config.form-card {

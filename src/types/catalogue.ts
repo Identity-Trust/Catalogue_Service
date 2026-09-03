@@ -34,6 +34,13 @@ export interface RegistrationField {
   verification?: string | null
   encrypted?: boolean
   options?: string[]
+  dpdp?: {
+    sensitive?: boolean
+    purpose?: string
+    retentionDays?: number | null
+    consentRequired?: boolean
+    justification?: string
+  }
 }
 
 export interface Organization {

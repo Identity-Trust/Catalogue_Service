@@ -12,6 +12,7 @@ import { useCatalogue } from '../../context/CatalogueContext'
 const fieldTypes = ['text', 'email', 'phone', 'password', 'date', 'dropdown', 'checkbox', 'address', 'file', 'gov-id', 'custom']
 const schemaEndpointHint = 'Schema API is not available on the running backend. Restart onboarding-and-identity-service with the latest code, then submit again.'
 const filters = ['All', 'Pending', 'Approved', 'Rejected']
+const sensitiveFieldNames = new Set(['aadhaar', 'aadhar', 'pan', 'passport', 'voter_id', 'driving_license', 'biometric', 'date_of_birth', 'dob', 'address'])
 
 const parseDropdownOptions = (value: string) => value
   .split(/\r?\n|,/)
@@ -27,6 +28,48 @@ const normalizePreviewFields = (fields: Array<string | RegistrationField>): Regi
   fields.map((field) => typeof field === 'string'
     ? { name: field, label: field, type: 'text', required: false }
     : field)
+
+const normalizeFieldName = (value?: string) => (value || '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+
+const isSensitiveField = (field?: RegistrationField) => {
+  if (!field) return false
+  const fieldName = normalizeFieldName(field.name)
+  return Boolean(field.dpdp?.sensitive || sensitiveFieldNames.has(fieldName) || field.type === 'gov-id' || field.type === 'address')
+}
+
+const toNumberOrNull = (value: unknown) => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
+const sanitizeFieldForSchema = (field: RegistrationField): RegistrationField => {
+  const cleanField: RegistrationField = {
+    ...field,
+    name: normalizeFieldName(field.name) || field.name,
+  }
+  if (!isSensitiveField(cleanField) && !cleanField.dpdp?.sensitive) {
+    delete cleanField.dpdp
+    return cleanField
+  }
+  cleanField.dpdp = {
+    sensitive: true,
+    purpose: cleanField.dpdp?.purpose?.trim() || '',
+    retentionDays: toNumberOrNull(cleanField.dpdp?.retentionDays),
+    consentRequired: Boolean(cleanField.dpdp?.consentRequired),
+    justification: cleanField.dpdp?.justification?.trim() || '',
+  }
+  return cleanField
+}
+
+const getSensitiveFieldSummary = (fields: RegistrationField[]) =>
+  fields.filter(isSensitiveField).map((field) => ({
+    name: normalizeFieldName(field.name),
+    label: field.label || field.name,
+    purpose: field.dpdp?.purpose || '',
+    retentionDays: toNumberOrNull(field.dpdp?.retentionDays),
+    consentRequired: Boolean(field.dpdp?.consentRequired),
+    justification: field.dpdp?.justification || '',
+  }))
 
 const renderPreviewControl = (field: RegistrationField) => {
   const label = field.label || field.name
@@ -55,10 +98,6 @@ export default function RegistrationBuilderPage() {
   })
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [schemaName, setSchemaName] = useState(() => readStorage('registration_builder_schema_name') || 'Customer Registration')
-  const [dpdpPurpose, setDpdpPurpose] = useState(() => readStorage('registration_builder_dpdp_purpose') || '')
-  const [dpdpConsentRequired, setDpdpConsentRequired] = useState(() => readStorage('registration_builder_dpdp_consent') === 'true')
-  const [dpdpRetentionDays, setDpdpRetentionDays] = useState(() => readStorage('registration_builder_dpdp_retention_days') || '')
-  const [dpdpJustification, setDpdpJustification] = useState(() => readStorage('registration_builder_dpdp_justification') || '')
   const [selectedAppId, setSelectedAppId] = useState(() => orgApps[0]?.id || '')
   const [message, setMessage] = useState('')
   const [saving, setSaving] = useState(false)
@@ -89,20 +128,23 @@ export default function RegistrationBuilderPage() {
   const updateField = (idx: number, patch: Partial<RegistrationField>) => persist(fields.map((field, index) => index === idx ? { ...field, ...patch } : field))
   const removeField = (idx: number) => { const next = fields.filter((_, index) => index !== idx); persist(next); setSelectedIndex(Math.max(0, Math.min(selectedIndex, next.length - 1))) }
   const moveUp = (idx: number) => { if (idx === 0) return; const copy = [...fields]; [copy[idx - 1], copy[idx]] = [copy[idx], copy[idx - 1]]; persist(copy); setSelectedIndex(idx - 1) }
+  const updateFieldDpdp = (idx: number, patch: Partial<NonNullable<RegistrationField['dpdp']>>) => updateField(idx, { dpdp: { ...(fields[idx]?.dpdp || {}), ...patch } })
+  const schemaFields = fields.map(sanitizeFieldForSchema)
+  const sensitiveFieldSummary = getSensitiveFieldSummary(schemaFields)
   const schemaJson = {
-    registrationFields: fields,
-    purpose: dpdpPurpose,
-    consentRequired: dpdpConsentRequired,
-    retentionDays: Number(dpdpRetentionDays) || null,
-    sensitiveDataJustification: dpdpJustification,
+    registrationFields: schemaFields,
+    dpdp: {
+      model: 'field-level',
+      sensitiveFields: sensitiveFieldSummary,
+    },
   }
   const configurationJson = {
     layout: 'single-page',
     versionedBy: 'organization-admin',
-    purpose: dpdpPurpose,
-    consentRequired: dpdpConsentRequired,
-    retentionDays: Number(dpdpRetentionDays) || null,
-    sensitiveDataJustification: dpdpJustification,
+    dpdp: {
+      model: 'field-level',
+      sensitiveFields: sensitiveFieldSummary,
+    },
   }
   const submitSchema = async (submitForApproval: boolean) => {
     if (!selectedAppId) { setMessage('Select an approved application first.'); return }
@@ -121,10 +163,6 @@ export default function RegistrationBuilderPage() {
       await refreshCatalogueData?.()
       await loadRegistrationHistory()
       localStorage.setItem('registration_builder_schema_name', schemaName)
-      localStorage.setItem('registration_builder_dpdp_purpose', dpdpPurpose)
-      localStorage.setItem('registration_builder_dpdp_consent', String(dpdpConsentRequired))
-      localStorage.setItem('registration_builder_dpdp_retention_days', dpdpRetentionDays)
-      localStorage.setItem('registration_builder_dpdp_justification', dpdpJustification)
       setStatusFilter(submitForApproval ? 'Pending' : 'All')
       setMessage(submitForApproval ? 'Registration schema submitted for platform approval.' : 'Registration schema draft saved.')
     } catch (error) {
@@ -139,7 +177,7 @@ export default function RegistrationBuilderPage() {
   const openCurrentPreview = () => setPreviewSchema({
     title: schemaName || 'Registration Form',
     appName: selectedAppName,
-    fields,
+    fields: schemaFields,
     version: 'Draft preview',
     status: 'draft',
   })
@@ -169,21 +207,65 @@ export default function RegistrationBuilderPage() {
           </div>
           <section className="dpdp-builder-card form-card">
             <div className="dpdp-builder-heading">
-              <span className="status-pill-ui status-pending"><AdminIcon name="pending" />DPDP Compliance</span>
-              <p>Required when registration fields collect sensitive identity data such as Aadhaar, PAN, DOB, passport, address, or biometric data.</p>
+              <span className="status-pill-ui status-pending"><AdminIcon name="pending" />Field-level DPDP</span>
+              <p>For every sensitive registration field, open Field Configuration and add its exact purpose, retention period, explicit consent setting, and justification.</p>
             </div>
-            <div className="dpdp-builder-grid">
-              <label>Processing Purpose<input value={dpdpPurpose} onChange={(event) => setDpdpPurpose(event.target.value)} placeholder="identity_verification, employee_onboarding, account_creation" /></label>
-              <label>Retention Period Days<input type="number" min="1" max="365" value={dpdpRetentionDays} onChange={(event) => setDpdpRetentionDays(event.target.value)} placeholder="180" /></label>
-              <label className="dpdp-consent-toggle"><input type="checkbox" checked={dpdpConsentRequired} onChange={(event) => setDpdpConsentRequired(event.target.checked)} /> Explicit user consent required</label>
-              <label className="full">Sensitive Data Justification<textarea value={dpdpJustification} onChange={(event) => setDpdpJustification(event.target.value)} placeholder="Explain why sensitive identity data is required for this application." rows={3} /></label>
+            <div className="dpdp-sensitive-summary">
+              <strong>{sensitiveFieldSummary.length} sensitive fields configured</strong>
+              {sensitiveFieldSummary.length ? sensitiveFieldSummary.map((field) => <span key={field.name}>{field.label}: {field.purpose || 'purpose missing'} / {field.retentionDays || 'retention missing'} days</span>) : <span>No sensitive fields detected yet.</span>}
             </div>
           </section>
           {message && <div className="builder-message">{message}</div>}
           <div className="builder-grid schema-builder-grid">
             <div className="builder-palette form-card"><h4>Available Fields</h4>{fieldTypes.map((type) => <button key={type} className="ghost-button icon-text-button" draggable onDragStart={(event) => event.dataTransfer.setData('text/plain', type)} onClick={() => addField(type)}><AdminIcon name="schema" />{type}</button>)}</div>
-            <div className="builder-preview form-card" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const type = event.dataTransfer.getData('text/plain'); if (type) addField(type) }}><h4>Live Registration Preview</h4><form>{fields.map((field, index) => <div key={field.name} className={`field-row ${selectedIndex === index ? 'selected' : ''}`} onClick={() => setSelectedIndex(index)}><span className="drag-handle" title="Drag to reorder" /><div className="control-wrap" style={{flex:1}}><div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}><label style={{ display: 'block', fontSize: 12, opacity: 0.9, fontWeight:600 }}>{field.label}{field.required ? ' *' : ''}</label><span className="field-type-chip">{(field.type || 'text').toUpperCase()}</span></div>{field.type === 'dropdown' ? <select>{(field.options || ['Option 1']).map((option, optionIndex) => <option key={optionIndex}>{option}</option>)}</select> : field.type === 'checkbox' ? <input type="checkbox" /> : <input placeholder={field.label} />}</div></div>)}</form><div className="json-preview"><h5>Generated JSON</h5><pre>{JSON.stringify(schemaJson, null, 2)}</pre></div></div>
-            <div className="builder-config form-card"><h4>Field Configuration</h4>{fields.length === 0 ? <p>No fields. Add one from left.</p> : <><div className="field-chip-list">{fields.map((field, idx) => <button key={field.name} className={`ghost-button ${selectedIndex === idx ? 'active' : ''}`} onClick={() => setSelectedIndex(idx)}>{field.label}</button>)}</div><div className="field-config-form"><label>Field Label<input value={fields[selectedIndex]?.label || ''} onChange={(event) => updateField(selectedIndex, { label: event.target.value })} /></label><label>Field Name<input value={fields[selectedIndex]?.name || ''} onChange={(event) => updateField(selectedIndex, { name: event.target.value })} /></label><label>Required<select value={fields[selectedIndex]?.required ? 'yes' : 'no'} onChange={(event) => updateField(selectedIndex, { required: event.target.value === 'yes' })}><option value="no">Optional</option><option value="yes">Required</option></select></label>{fields[selectedIndex]?.type === 'dropdown' && <label>Dropdown Options<textarea value={(fields[selectedIndex]?.options || []).join('\n')} onChange={(event) => updateField(selectedIndex, { options: parseDropdownOptions(event.target.value) })} placeholder="One option per line, or comma separated" rows={5} /></label>}<div className="field-action-row"><button className="secondary-button" onClick={() => moveUp(selectedIndex)}>Move Up</button><button className="secondary-button danger-button" onClick={() => removeField(selectedIndex)}>Remove</button></div></div></>}</div>
+            <div className="builder-preview form-card" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const type = event.dataTransfer.getData('text/plain'); if (type) addField(type) }}>
+              <h4>Live Registration Preview</h4>
+              <form>
+                {fields.map((field, index) => (
+                  <div key={field.name} className={`field-row ${selectedIndex === index ? 'selected' : ''}`} onClick={() => setSelectedIndex(index)}>
+                    <span className="drag-handle" title="Drag to reorder" />
+                    <div className="control-wrap" style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                        <label style={{ display: 'block', fontSize: 12, opacity: 0.9, fontWeight: 600 }}>{field.label}{field.required ? ' *' : ''}</label>
+                        <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                          {isSensitiveField(field) && <span className="field-type-chip dpdp-chip">DPDP</span>}
+                          <span className="field-type-chip">{(field.type || 'text').toUpperCase()}</span>
+                        </span>
+                      </div>
+                      {field.type === 'dropdown' ? <select>{(field.options || ['Option 1']).map((option, optionIndex) => <option key={optionIndex}>{option}</option>)}</select> : field.type === 'checkbox' ? <input type="checkbox" /> : <input placeholder={field.label} />}
+                      {isSensitiveField(field) && <div className="field-dpdp-preview">
+                        <span>{field.dpdp?.purpose || 'Purpose missing'}</span>
+                        <span>{field.dpdp?.retentionDays || 'Retention missing'} days</span>
+                        <span>{field.dpdp?.consentRequired ? 'Consent required' : 'Consent missing'}</span>
+                      </div>}
+                    </div>
+                  </div>
+                ))}
+              </form>
+              <div className="json-preview"><h5>Generated JSON</h5><pre>{JSON.stringify(schemaJson, null, 2)}</pre></div>
+            </div>
+            <div className="builder-config form-card">
+              <h4>Field Configuration</h4>
+              {fields.length === 0 ? <p>No fields. Add one from left.</p> : <>
+                <div className="field-chip-list">{fields.map((field, idx) => <button key={field.name} className={`ghost-button ${selectedIndex === idx ? 'active' : ''}`} onClick={() => setSelectedIndex(idx)}>{field.label}</button>)}</div>
+                <div className="field-config-form">
+                  <label>Field Label<input value={fields[selectedIndex]?.label || ''} onChange={(event) => updateField(selectedIndex, { label: event.target.value })} /></label>
+                  <label>Field Name<input value={fields[selectedIndex]?.name || ''} onChange={(event) => updateField(selectedIndex, { name: event.target.value })} /></label>
+                  <label>Required<select value={fields[selectedIndex]?.required ? 'yes' : 'no'} onChange={(event) => updateField(selectedIndex, { required: event.target.value === 'yes' })}><option value="no">Optional</option><option value="yes">Required</option></select></label>
+                  {fields[selectedIndex]?.type === 'dropdown' && <label>Dropdown Options<textarea value={(fields[selectedIndex]?.options || []).join('\n')} onChange={(event) => updateField(selectedIndex, { options: parseDropdownOptions(event.target.value) })} placeholder="One option per line, or comma separated" rows={5} /></label>}
+                  <section className="field-dpdp-config">
+                    <label className="builder-check-row"><input type="checkbox" checked={Boolean(fields[selectedIndex]?.dpdp?.sensitive || isSensitiveField(fields[selectedIndex]))} onChange={(event) => updateFieldDpdp(selectedIndex, { sensitive: event.target.checked })} /> Sensitive identity field</label>
+                    {isSensitiveField(fields[selectedIndex]) && <>
+                      <label>Processing Purpose<input value={fields[selectedIndex]?.dpdp?.purpose || ''} onChange={(event) => updateFieldDpdp(selectedIndex, { purpose: event.target.value })} placeholder="identity_verification" /></label>
+                      <label>Retention Days<input type="number" min="1" max="365" value={fields[selectedIndex]?.dpdp?.retentionDays || ''} onChange={(event) => updateFieldDpdp(selectedIndex, { retentionDays: toNumberOrNull(event.target.value) })} placeholder="180" /></label>
+                      <label className="builder-check-row"><input type="checkbox" checked={Boolean(fields[selectedIndex]?.dpdp?.consentRequired)} onChange={(event) => updateFieldDpdp(selectedIndex, { consentRequired: event.target.checked })} /> Explicit user consent required</label>
+                      <label>Justification<textarea value={fields[selectedIndex]?.dpdp?.justification || ''} onChange={(event) => updateFieldDpdp(selectedIndex, { justification: event.target.value })} placeholder="Why is this specific field required?" rows={3} /></label>
+                    </>}
+                  </section>
+                  <div className="field-action-row"><button className="secondary-button" onClick={() => moveUp(selectedIndex)}>Move Up</button><button className="secondary-button danger-button" onClick={() => removeField(selectedIndex)}>Remove</button></div>
+                </div>
+              </>}
+            </div>
           </div>
           <section className="schema-history-panel">
             <div className="panel-heading"><h3>Registration Schemas</h3><span>{historyLoading ? 'Loading versions...' : `${schemaHistory.length} versions`}</span></div>
@@ -219,6 +301,18 @@ export default function RegistrationBuilderPage() {
                   </div>
                 )) : <div className="empty-state">No fields are available for this registration form.</div>}
               </form>
+              <section className="preview-dpdp-summary">
+                <h4>DPDP field-level declarations</h4>
+                {getSensitiveFieldSummary(previewSchema.fields).length ? getSensitiveFieldSummary(previewSchema.fields).map((field) => (
+                  <div key={field.name} className="preview-dpdp-row">
+                    <strong>{field.label}</strong>
+                    <span>Purpose: {field.purpose || 'Missing'}</span>
+                    <span>Retention: {field.retentionDays || 'Missing'} days</span>
+                    <span>{field.consentRequired ? 'Explicit consent required' : 'Consent missing'}</span>
+                    <small>{field.justification || 'Justification missing'}</small>
+                  </div>
+                )) : <p>No sensitive fields detected in this registration schema.</p>}
+              </section>
               <div className="modal-actions"><button type="button" className="primary-button" onClick={() => setPreviewSchema(null)}>Close</button></div>
             </div>
           </div>,
