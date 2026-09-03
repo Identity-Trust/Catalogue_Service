@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { AdminIcon } from '../../../../components/ui'
-import type { RegistrationField } from '../../../../types/catalogue'
+import type { RegistrationField, SchemaRecord } from '../../../../types/catalogue'
 import { readStorage } from '../../../../utils/storage'
 import OrgSidebar from '../../components/OrgSidebar'
 import OrgTopbar from '../../components/OrgTopbar'
@@ -17,11 +18,38 @@ const parseDropdownOptions = (value: string) => value
   .map((option) => option.trim())
   .filter(Boolean)
 
+const getSchemaFields = (schema: SchemaRecord) => {
+  const schemaJson = schema.schemaJson as { registrationFields?: RegistrationField[]; fields?: RegistrationField[] } | undefined
+  return schema.fields || schemaJson?.registrationFields || schemaJson?.fields || []
+}
+
+const normalizePreviewFields = (fields: Array<string | RegistrationField>): RegistrationField[] =>
+  fields.map((field) => typeof field === 'string'
+    ? { name: field, label: field, type: 'text', required: false }
+    : field)
+
+const renderPreviewControl = (field: RegistrationField) => {
+  const label = field.label || field.name
+  if (field.type === 'dropdown') {
+    return <select disabled><option value="">Select {label}</option>{(field.options || []).map((option, index) => <option key={`${field.name}-${index}`}>{option}</option>)}</select>
+  }
+  if (field.type === 'checkbox') {
+    return <label className="registration-preview-checkbox"><input type="checkbox" disabled /> {label}</label>
+  }
+  if (field.type === 'address') {
+    return <textarea placeholder={label} rows={3} disabled />
+  }
+  if (field.type === 'file') {
+    return <input type="file" disabled />
+  }
+  const inputType = field.type === 'email' ? 'email' : field.type === 'phone' ? 'tel' : field.type === 'date' ? 'date' : field.type === 'password' ? 'password' : 'text'
+  return <input type={inputType} placeholder={label} disabled />
+}
+
 export default function RegistrationBuilderPage() {
-  const { applications, currentOrg, orgLoginId, refreshCatalogueData, schemas, setPolicyPreviewModal, setView, submitIdentitySchemaVersion } = useCatalogue()
+  const { applications, currentOrg, loadIdentitySchemaVersions, orgLoginId, refreshCatalogueData, setView, submitIdentitySchemaVersion } = useCatalogue()
   const orgId = currentOrg?.id || orgLoginId
   const orgApps = useMemo(() => applications.filter((app) => app.orgId === orgId && app.status === 'approved'), [applications, orgId])
-  const registrationSchemas = schemas.filter((schema: any) => schema.orgId === orgId && schema.type === 'registration')
   const [fields, setFields] = useState<RegistrationField[]>(() => {
     try { return JSON.parse(readStorage('registration_builder') || 'null') || [{ name: 'fullName', label: 'Full Name', type: 'text', required: true }] } catch { return [{ name: 'fullName', label: 'Full Name', type: 'text', required: true }] }
   })
@@ -35,8 +63,26 @@ export default function RegistrationBuilderPage() {
   const [message, setMessage] = useState('')
   const [saving, setSaving] = useState(false)
   const [statusFilter, setStatusFilter] = useState('All')
+  const [schemaHistory, setSchemaHistory] = useState<SchemaRecord[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [previewSchema, setPreviewSchema] = useState<{ title: string; appName?: string; fields: RegistrationField[]; version?: string; status?: string; createdAt?: string } | null>(null)
   useEffect(() => { refreshCatalogueData?.() }, [])
   useEffect(() => { if (!selectedAppId && orgApps[0]?.id) setSelectedAppId(orgApps[0].id) }, [orgApps, selectedAppId])
+
+  const loadRegistrationHistory = useCallback(async () => {
+    if (!orgId) return
+    setHistoryLoading(true)
+    try {
+      const versions = await loadIdentitySchemaVersions(orgId, 'REGISTRATION')
+      setSchemaHistory(versions)
+    } catch {
+      setSchemaHistory([])
+    } finally {
+      setHistoryLoading(false)
+    }
+  }, [loadIdentitySchemaVersions, orgId])
+
+  useEffect(() => { loadRegistrationHistory() }, [loadRegistrationHistory])
 
   const persist = (next: RegistrationField[]) => { setFields(next); localStorage.setItem('registration_builder', JSON.stringify(next)) }
   const addField = (type: string) => persist([...fields, { name: `${type}_${Date.now().toString().slice(-4)}`, label: type.charAt(0).toUpperCase() + type.slice(1), type, required: false, options: type === 'dropdown' ? ['Option 1', 'Option 2'] : undefined }])
@@ -73,6 +119,7 @@ export default function RegistrationBuilderPage() {
         submitForApproval,
       })
       await refreshCatalogueData?.()
+      await loadRegistrationHistory()
       localStorage.setItem('registration_builder_schema_name', schemaName)
       localStorage.setItem('registration_builder_dpdp_purpose', dpdpPurpose)
       localStorage.setItem('registration_builder_dpdp_consent', String(dpdpConsentRequired))
@@ -87,7 +134,23 @@ export default function RegistrationBuilderPage() {
       setSaving(false)
     }
   }
-  const filteredRegistrationSchemas = registrationSchemas.filter((schema: any) => statusFilter === 'All' || schema.status === statusFilter.toLowerCase())
+  const filteredRegistrationSchemas = schemaHistory.filter((schema) => statusFilter === 'All' || schema.status === statusFilter.toLowerCase())
+  const selectedAppName = orgApps.find((app) => app.id === selectedAppId)?.name || selectedAppId
+  const openCurrentPreview = () => setPreviewSchema({
+    title: schemaName || 'Registration Form',
+    appName: selectedAppName,
+    fields,
+    version: 'Draft preview',
+    status: 'draft',
+  })
+  const openHistoryPreview = (schema: SchemaRecord) => setPreviewSchema({
+    title: schema.name,
+    appName: schema.appName || schema.appId || undefined,
+    fields: normalizePreviewFields(getSchemaFields(schema)),
+    version: `Version ${schema.versionNumber || 1}`,
+    status: schema.status,
+    createdAt: schema.createdAt,
+  })
 
   return (
     <div className="org-dashboard-shell org-console-shell">
@@ -97,7 +160,7 @@ export default function RegistrationBuilderPage() {
         <section className="org-console-content builder-console-content">
           <div className="schema-builder-header">
             <div><span className="eyebrow">Application schema</span><h2>Registration Page Builder</h2><p>Design the registration fields used by one approved application.</p><span className="status-pill-ui status-pending builder-approval-pill"><AdminIcon name="pending" />Platform approval required</span></div>
-            <div className="schema-builder-actions"><button className="secondary-button icon-text-button" disabled={saving} onClick={() => submitSchema(false)}><AdminIcon name="schema" />Save Draft</button><button className="primary-button icon-text-button" disabled={saving} onClick={() => submitSchema(true)}><AdminIcon name="check" />Submit for Approval</button></div>
+            <div className="schema-builder-actions"><button className="secondary-button icon-text-button" disabled={saving} onClick={() => submitSchema(false)}><AdminIcon name="schema" />Save Draft</button><button className="primary-button icon-text-button" disabled={saving} onClick={() => submitSchema(true)}><AdminIcon name="check" />Submit for Approval</button><button className="secondary-button icon-text-button" onClick={openCurrentPreview}><AdminIcon name="view" />Registration Form Preview</button></div>
           </div>
           {!orgApps.length && <div className="builder-message warning">No approved application is available. Approve an application first, then create its registration schema.</div>}
           <div className="schema-config-strip">
@@ -123,18 +186,44 @@ export default function RegistrationBuilderPage() {
             <div className="builder-config form-card"><h4>Field Configuration</h4>{fields.length === 0 ? <p>No fields. Add one from left.</p> : <><div className="field-chip-list">{fields.map((field, idx) => <button key={field.name} className={`ghost-button ${selectedIndex === idx ? 'active' : ''}`} onClick={() => setSelectedIndex(idx)}>{field.label}</button>)}</div><div className="field-config-form"><label>Field Label<input value={fields[selectedIndex]?.label || ''} onChange={(event) => updateField(selectedIndex, { label: event.target.value })} /></label><label>Field Name<input value={fields[selectedIndex]?.name || ''} onChange={(event) => updateField(selectedIndex, { name: event.target.value })} /></label><label>Required<select value={fields[selectedIndex]?.required ? 'yes' : 'no'} onChange={(event) => updateField(selectedIndex, { required: event.target.value === 'yes' })}><option value="no">Optional</option><option value="yes">Required</option></select></label>{fields[selectedIndex]?.type === 'dropdown' && <label>Dropdown Options<textarea value={(fields[selectedIndex]?.options || []).join('\n')} onChange={(event) => updateField(selectedIndex, { options: parseDropdownOptions(event.target.value) })} placeholder="One option per line, or comma separated" rows={5} /></label>}<div className="field-action-row"><button className="secondary-button" onClick={() => moveUp(selectedIndex)}>Move Up</button><button className="secondary-button danger-button" onClick={() => removeField(selectedIndex)}>Remove</button></div></div></>}</div>
           </div>
           <section className="schema-history-panel">
-            <div className="panel-heading"><h3>Registration Schemas</h3><span>{registrationSchemas.length} versions</span></div>
+            <div className="panel-heading"><h3>Registration Schemas</h3><span>{historyLoading ? 'Loading versions...' : `${schemaHistory.length} versions`}</span></div>
             <div className="tab-row">{filters.map((filter) => <button key={filter} type="button" className={`tab ${statusFilter === filter ? 'active' : ''}`} onClick={() => setStatusFilter(filter)}>{filter}</button>)}</div>
             <div className="schema-status-list">
               {filteredRegistrationSchemas.length ? filteredRegistrationSchemas.map((schema: any) => (
                 <article key={schema.versionId || schema.id} className="schema-status-card">
-                  <div><div className="approval-name-row"><strong>{schema.name}</strong><span className={`status-pill-ui status-${schema.status}`}><AdminIcon name={schema.status === 'approved' ? 'check' : schema.status === 'rejected' ? 'rejected' : 'pending'} />{schema.status}</span></div><p>{schema.appName || schema.appId || 'Application'} - Version {schema.versionNumber || 1}</p></div>
-                  <div className="schema-card-actions"><button type="button" className="ghost-button icon-text-button" onClick={() => setPolicyPreviewModal(schema)}><AdminIcon name="view" />View JSON</button><small>{schema.createdAt}</small></div>
+                  <div><div className="approval-name-row"><strong>{schema.name}</strong><span className={`status-pill-ui status-${schema.status}`}><AdminIcon name={schema.status === 'approved' ? 'check' : schema.status === 'rejected' ? 'rejected' : 'pending'} />{schema.status}</span></div><p>{schema.appName || schema.appId || 'Application'} - Version {schema.versionNumber || 1}{schema.changeSummary ? ` - ${schema.changeSummary}` : ''}</p></div>
+                  <div className="schema-card-actions"><button type="button" className="ghost-button icon-text-button" onClick={() => openHistoryPreview(schema)}><AdminIcon name="view" />Preview Form</button><small>{schema.createdAt}</small></div>
                 </article>
               )) : <div className="empty-state">No registration schemas found for this filter.</div>}
             </div>
           </section>
         </section>
+        {previewSchema && typeof document !== 'undefined' && createPortal(
+          <div className="modal-backdrop" onClick={() => setPreviewSchema(null)}>
+            <div className="modal-card polished-modal wide registration-form-preview-modal" onClick={(event) => event.stopPropagation()}>
+              <div className="modal-header">
+                <div className="modal-title-row"><span className="modal-title-icon"><AdminIcon name="schema" /></span><h3>{previewSchema.title}</h3></div>
+                <button type="button" className="close-button" onClick={() => setPreviewSchema(null)}>x</button>
+              </div>
+              <div className="registration-preview-meta">
+                {previewSchema.appName && <span>{previewSchema.appName}</span>}
+                {previewSchema.version && <span>{previewSchema.version}</span>}
+                {previewSchema.status && <span className={`status-pill-ui status-${previewSchema.status}`}>{previewSchema.status}</span>}
+                {previewSchema.createdAt && <span>{previewSchema.createdAt}</span>}
+              </div>
+              <form className="registration-form-preview">
+                {previewSchema.fields.length ? previewSchema.fields.map((field) => (
+                  <div key={field.name} className={field.type === 'address' || field.type === 'file' ? 'registration-preview-field full' : 'registration-preview-field'}>
+                    {field.type !== 'checkbox' && <label>{field.label || field.name}{field.required ? ' *' : ''}</label>}
+                    {renderPreviewControl(field)}
+                  </div>
+                )) : <div className="empty-state">No fields are available for this registration form.</div>}
+              </form>
+              <div className="modal-actions"><button type="button" className="primary-button" onClick={() => setPreviewSchema(null)}>Close</button></div>
+            </div>
+          </div>,
+          document.body
+        )}
       </main>
     </div>
   )

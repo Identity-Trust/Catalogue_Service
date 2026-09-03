@@ -3600,6 +3600,168 @@ textarea {
   white-space: pre;
 }
 
+.registration-form-preview-modal {
+  max-width: 820px;
+}
+
+.registration-preview-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  color: #66758f;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.registration-preview-meta > span:not(.status-pill-ui) {
+  padding: 5px 9px;
+  border: 1px solid #dbe7f5;
+  border-radius: 7px;
+  background: #f8fbff;
+}
+
+.registration-form-preview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid #dce4ef;
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.registration-preview-field {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.registration-preview-field.full {
+  grid-column: 1 / -1;
+}
+
+.registration-preview-field label,
+.registration-preview-checkbox {
+  color: #334155;
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.registration-preview-field input,
+.registration-preview-field select,
+.registration-preview-field textarea {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid #cbd7e6;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #10233f;
+}
+
+.registration-preview-checkbox {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #cbd7e6;
+  border-radius: 8px;
+  background: #ffffff;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.registration-preview-checkbox input {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.login-form-preview-shell {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(220px, 0.7fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.login-form-preview {
+  grid-template-columns: 1fr;
+}
+
+.login-preview-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.login-preview-heading h4 {
+  margin: 0;
+  color: #13233f;
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+.login-preview-heading p {
+  margin: 3px 0 0;
+  color: #66758f;
+  font-size: 13px;
+}
+
+.login-form-preview .primary-button {
+  width: 100%;
+  justify-content: center;
+}
+
+.login-preview-note {
+  padding: 10px 12px;
+  border: 1px solid #c7d2fe;
+  border-radius: 8px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.login-preview-flow {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid #dce4ef;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.login-preview-flow h4 {
+  margin: 0 0 2px;
+  color: #13233f;
+  font-size: 15px;
+}
+
+.login-preview-flow span {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.login-preview-flow b {
+  width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #1769ff;
+}
+
 .flow-step-row,
 .flow-step-row .control-wrap {
   min-width: 0;

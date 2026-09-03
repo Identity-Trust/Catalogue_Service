@@ -1,7 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { AdminIcon } from '../../../../components/ui'
+import type { SchemaRecord } from '../../../../types/catalogue'
 import { readStorage } from '../../../../utils/storage'
 import OrgSidebar from '../../components/OrgSidebar'
 import OrgTopbar from '../../components/OrgTopbar'
@@ -45,8 +47,24 @@ const buildLoginFields = (methods: string[]) => {
   ]
 }
 
+const normalizeLoginPayload = (schema: SchemaRecord) => {
+  const schemaJson = schema.schemaJson as any
+  return schema.payload || schemaJson || {}
+}
+
+const getLoginPreviewFields = (payload: any) => {
+  if (Array.isArray(payload.loginFields) && payload.loginFields.length) return payload.loginFields
+  return buildLoginFields(Array.isArray(payload.authenticationMethods) ? payload.authenticationMethods : ['PASSWORD'])
+}
+
+const renderLoginPreviewControl = (field: any) => {
+  const label = field.label || field.name || 'Field'
+  const inputType = field.type === 'email' ? 'email' : field.type === 'phone' ? 'tel' : field.type === 'password' ? 'password' : 'text'
+  return <input type={inputType} placeholder={label} disabled />
+}
+
 export default function LoginBuilderPage() {
-  const { applications, currentOrg, orgLoginId, refreshCatalogueData, schemas, setPolicyPreviewModal, setView, submitIdentitySchemaVersion } = useCatalogue()
+  const { applications, currentOrg, loadIdentitySchemaVersions, orgLoginId, refreshCatalogueData, setView, submitIdentitySchemaVersion } = useCatalogue()
   const orgId = currentOrg?.id || orgLoginId
   const orgApps = useMemo(() => applications.filter((app) => app.orgId === orgId && app.status === 'approved'), [applications, orgId])
   const [selectedAppId, setSelectedAppId] = useState(() => orgApps[0]?.id || '')
@@ -60,11 +78,14 @@ export default function LoginBuilderPage() {
   const [saving, setSaving] = useState(false)
   const [statusFilter, setStatusFilter] = useState('All')
   const [newStep, setNewStep] = useState('')
+  const [schemaHistory, setSchemaHistory] = useState<SchemaRecord[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [previewPolicy, setPreviewPolicy] = useState<{ title: string; appName?: string; payload: any; version?: string; status?: string; createdAt?: string } | null>(null)
 
   useEffect(() => { refreshCatalogueData?.() }, [])
   useEffect(() => { if (!selectedAppId && orgApps[0]?.id) setSelectedAppId(orgApps[0].id) }, [orgApps, selectedAppId])
 
-  const loginSchemas = schemas.filter((schema: any) => schema.orgId === orgId && schema.type === 'login')
+  const loginSchemas = schemaHistory
   const filteredLoginSchemas = loginSchemas.filter((schema: any) => statusFilter === 'All' || schema.status === statusFilter.toLowerCase())
   const selectedApp = orgApps.find((app) => app.id === selectedAppId)
   const loginFields = useMemo(() => buildLoginFields(selectedMethods), [selectedMethods])
@@ -81,6 +102,38 @@ export default function LoginBuilderPage() {
       tokenDelivery: 'access-token',
     },
   }
+
+  const loadLoginHistory = useCallback(async () => {
+    if (!orgId) return
+    setHistoryLoading(true)
+    try {
+      const versions = await loadIdentitySchemaVersions(orgId, 'LOGIN')
+      setSchemaHistory(versions)
+    } catch {
+      setSchemaHistory([])
+    } finally {
+      setHistoryLoading(false)
+    }
+  }, [loadIdentitySchemaVersions, orgId])
+
+  useEffect(() => { loadLoginHistory() }, [loadLoginHistory])
+
+  const openCurrentPreview = () => setPreviewPolicy({
+    title: policyName || 'Login Configuration',
+    appName: selectedApp?.name || selectedAppId,
+    payload: policyJson,
+    version: 'Draft preview',
+    status: 'draft',
+  })
+
+  const openHistoryPreview = (schema: SchemaRecord) => setPreviewPolicy({
+    title: schema.name,
+    appName: schema.appName || schema.appId || undefined,
+    payload: normalizeLoginPayload(schema),
+    version: `Version ${schema.versionNumber || 1}`,
+    status: schema.status,
+    createdAt: schema.createdAt,
+  })
 
   const persistMethods = (next: string[]) => { setSelectedMethods(next); localStorage.setItem('catalogue_login_builder_methods', JSON.stringify(next)) }
   const persistFlow = (next: string[]) => { setFlowSteps(next); localStorage.setItem('catalogue_login_builder_flow', JSON.stringify(next)) }
@@ -108,6 +161,7 @@ export default function LoginBuilderPage() {
         submitForApproval,
       })
       await refreshCatalogueData?.()
+      await loadLoginHistory()
       localStorage.setItem('catalogue_login_builder_policy_name', policyName)
       setStatusFilter(submitForApproval ? 'Pending' : 'All')
       setMessage(submitForApproval ? 'Login configuration submitted for platform approval.' : 'Login configuration draft saved.')
@@ -135,6 +189,7 @@ export default function LoginBuilderPage() {
             <div className="schema-builder-actions">
               <button className="secondary-button icon-text-button" disabled={saving} onClick={() => submitLoginSchema(false)}><AdminIcon name="schema" />Save Draft</button>
               <button className="primary-button icon-text-button" disabled={saving} onClick={() => submitLoginSchema(true)}><AdminIcon name="check" />Submit for Approval</button>
+              <button className="secondary-button icon-text-button" onClick={openCurrentPreview}><AdminIcon name="view" />Login Form Preview</button>
             </div>
           </div>
 
@@ -191,18 +246,57 @@ export default function LoginBuilderPage() {
           </div>
 
           <section className="schema-history-panel">
-            <div className="panel-heading"><h3>Login Configurations</h3><span>{loginSchemas.length} versions</span></div>
+            <div className="panel-heading"><h3>Login Configurations</h3><span>{historyLoading ? 'Loading versions...' : `${loginSchemas.length} versions`}</span></div>
             <div className="tab-row">{filters.map((filter) => <button key={filter} type="button" className={`tab ${statusFilter === filter ? 'active' : ''}`} onClick={() => setStatusFilter(filter)}>{filter}</button>)}</div>
             <div className="schema-status-list">
               {filteredLoginSchemas.length ? filteredLoginSchemas.map((schema: any) => (
                 <article key={schema.versionId || schema.id} className="schema-status-card">
-                  <div><div className="approval-name-row"><strong>{schema.name}</strong><span className={`status-pill-ui status-${schema.status}`}><AdminIcon name={schema.status === 'approved' ? 'check' : schema.status === 'rejected' ? 'rejected' : 'pending'} />{schema.status}</span></div><p>{schema.appName || schema.appId || 'Application'} - Version {schema.versionNumber || 1}</p></div>
-                  <div className="schema-card-actions"><button type="button" className="ghost-button icon-text-button" onClick={() => setPolicyPreviewModal(schema)}><AdminIcon name="view" />View JSON</button><small>{schema.createdAt}</small></div>
+                  <div><div className="approval-name-row"><strong>{schema.name}</strong><span className={`status-pill-ui status-${schema.status}`}><AdminIcon name={schema.status === 'approved' ? 'check' : schema.status === 'rejected' ? 'rejected' : 'pending'} />{schema.status}</span></div><p>{schema.appName || schema.appId || 'Application'} - Version {schema.versionNumber || 1}{schema.changeSummary ? ` - ${schema.changeSummary}` : ''}</p></div>
+                  <div className="schema-card-actions"><button type="button" className="ghost-button icon-text-button" onClick={() => openHistoryPreview(schema)}><AdminIcon name="view" />Preview Login</button><small>{schema.createdAt}</small></div>
                 </article>
               )) : <div className="empty-state">No login configurations found for this filter.</div>}
             </div>
           </section>
         </section>
+        {previewPolicy && typeof document !== 'undefined' && createPortal(
+          <div className="modal-backdrop" onClick={() => setPreviewPolicy(null)}>
+            <div className="modal-card polished-modal wide registration-form-preview-modal login-form-preview-modal" onClick={(event) => event.stopPropagation()}>
+              <div className="modal-header">
+                <div className="modal-title-row"><span className="modal-title-icon"><AdminIcon name="auth" /></span><h3>{previewPolicy.title}</h3></div>
+                <button type="button" className="close-button" onClick={() => setPreviewPolicy(null)}>x</button>
+              </div>
+              <div className="registration-preview-meta">
+                {previewPolicy.appName && <span>{previewPolicy.appName}</span>}
+                {previewPolicy.version && <span>{previewPolicy.version}</span>}
+                {previewPolicy.status && <span className={`status-pill-ui status-${previewPolicy.status}`}>{previewPolicy.status}</span>}
+                {previewPolicy.createdAt && <span>{previewPolicy.createdAt}</span>}
+              </div>
+              <div className="login-form-preview-shell">
+                <form className="registration-form-preview login-form-preview">
+                  <div className="login-preview-heading">
+                    <span className="modal-title-icon"><AdminIcon name="shield" /></span>
+                    <div><h4>Sign in</h4><p>{previewPolicy.appName || 'Application'}</p></div>
+                  </div>
+                  {getLoginPreviewFields(previewPolicy.payload).map((field: any) => (
+                    <div key={field.name} className="registration-preview-field full">
+                      <label>{field.label || field.name}{field.required ? ' *' : ''}</label>
+                      {renderLoginPreviewControl(field)}
+                    </div>
+                  ))}
+                  {previewPolicy.payload.mfa && <div className="login-preview-note">MFA: {(previewPolicy.payload.mfaMethods || []).join(', ') || 'Enabled'}</div>}
+                  {previewPolicy.payload.riskAuthentication && <div className="login-preview-note">Risk-based authentication enabled</div>}
+                  <button type="button" className="primary-button" disabled>Continue</button>
+                </form>
+                <div className="login-preview-flow">
+                  <h4>Flow Steps</h4>
+                  {(previewPolicy.payload.flow || []).map((step: string, index: number) => <span key={`${step}-${index}`}><b>{index + 1}</b>{step}</span>)}
+                </div>
+              </div>
+              <div className="modal-actions"><button type="button" className="primary-button" onClick={() => setPreviewPolicy(null)}>Close</button></div>
+            </div>
+          </div>,
+          document.body
+        )}
       </main>
     </div>
   )

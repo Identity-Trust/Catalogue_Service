@@ -119,6 +119,7 @@ export interface SchemaRecord {
   schemaJson?: unknown
   configurationJson?: unknown
   status: string
+  changeSummary?: string
   createdAt: string
   approvedAt?: string
   rejectedAt?: string

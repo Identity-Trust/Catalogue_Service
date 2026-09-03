@@ -322,6 +322,7 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
       schemaJson,
       configurationJson,
       status: schema.status === 'APPROVED' || schema.status === 'PUBLISHED' ? 'approved' : schema.status === 'REJECTED' ? 'rejected' : schema.status === 'DRAFT' ? 'draft' : 'pending',
+      changeSummary: schema.changeSummary,
       createdAt: schema.createdAt ? new Date(schema.createdAt).toLocaleString() : new Date().toLocaleString(),
       approvedAt: schema.publishedAt ? new Date(schema.publishedAt).toLocaleString() : undefined,
     }
@@ -366,6 +367,13 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
     })()
     refreshInFlight.current = refreshPromise
     return refreshPromise
+  }
+
+  const loadIdentitySchemaVersions = async (organizationId: string, schemaType?: 'REGISTRATION' | 'LOGIN') => {
+    if (!organizationId) return []
+    const query = schemaType ? `?schemaType=${encodeURIComponent(schemaType)}` : ''
+    const data = await backendRequest<any[]>(`/api/v1/onboarding/organizations/${encodeURIComponent(organizationId)}/schemas/versions${query}`)
+    return data.map(mapBackendSchema)
   }
 
   useEffect(() => {
@@ -783,7 +791,7 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
       setAppSearch, setConfirmModal, setConfirmProcessing, setLoginPublishModal, setOrgApprovalModal,
       setOrgLoginChannel, setOrgLoginId, setOrgOtp, setOrgsFilter, setPlatformLogin, setPolicyPreviewModal, setPublishModal,
       setRegisterAppForm, setRegisterAppModal, setRequestModal, setSchemaFilterStatus, setSchemas, setSchemaSearch, setSchemaTab,
-      registrationError, registrationSubmitting, setOrganizations, setView, step, submitIdentitySchemaVersion, submitRegistration, successData, suspendOrganization, unsuspendOrganization, updateRegistrationField, view,
+      loadIdentitySchemaVersions, registrationError, registrationSubmitting, setOrganizations, setView, step, submitIdentitySchemaVersion, submitRegistration, successData, suspendOrganization, unsuspendOrganization, updateRegistrationField, view,
     }}>
       {children}
     </CatalogueContext.Provider>
