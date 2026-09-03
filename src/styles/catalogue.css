@@ -1625,6 +1625,33 @@ textarea {
   color: #52647f;
 }
 
+.platform-schema-page .panel-copy p {
+  font-size: 14px;
+}
+
+.platform-schema-page .tab,
+.platform-schema-page input,
+.platform-schema-page select {
+  font-size: 14px;
+}
+
+.platform-schema-page .approval-card {
+  padding: 16px 18px;
+}
+
+.platform-schema-page .approval-name {
+  font-size: 1.02rem;
+}
+
+.platform-schema-page .approval-meta {
+  font-size: 14px;
+}
+
+.platform-schema-page .status-pill-ui,
+.platform-schema-page .approval-actions button {
+  font-size: 14px;
+}
+
 .approval-actions {
   display: flex;
   gap: 10px;
