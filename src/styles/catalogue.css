@@ -142,9 +142,9 @@ button { cursor: pointer; }
 .hero-copy h1 {
   margin: 0;
   color: #ffffff;
-  font-size: 48px;
+  font-size: 44px;
   line-height: 1;
-  letter-spacing: -0.05em;
+  letter-spacing: 0;
   font-weight: 900;
 }
 
@@ -274,10 +274,10 @@ button { cursor: pointer; }
 
 .stat-box strong {
   color: #ffffff;
-  font-size: 26px;
+  font-size: 24px;
   line-height: 1;
   font-weight: 900;
-  letter-spacing: -0.05em;
+  letter-spacing: 0;
 }
 
 .stat-box span {
@@ -350,8 +350,8 @@ button { cursor: pointer; }
 
 .panel-copy h2 {
   margin: 0;
-  font-size: 2rem;
-  letter-spacing: -0.05em;
+  font-size: 1.65rem;
+  letter-spacing: 0;
 }
 
 .panel-copy p {
@@ -497,8 +497,8 @@ textarea {
 
 .success-box h2 {
   margin: 18px 0 14px;
-  font-size: 2rem;
-  letter-spacing: -0.05em;
+  font-size: 1.65rem;
+  letter-spacing: 0;
 }
 
 .org-id-box {
@@ -520,7 +520,7 @@ textarea {
 }
 
 .org-id-box strong {
-  font-size: 1.8rem;
+  font-size: 1.45rem;
   letter-spacing: 0.02em;
 }
 
@@ -618,7 +618,7 @@ textarea {
 .org-login-visual h1 {
   margin: 22px 0 10px;
   color: #ffffff;
-  font-size: 30px;
+  font-size: 26px;
   line-height: 1.1;
   letter-spacing: 0;
 }
@@ -1065,7 +1065,7 @@ textarea {
 .admin-stat-card.orange .admin-stat-icon { background: #fff5e6; }
 
 .admin-stat-card strong {
-  font-size: 35px;
+  font-size: 28px;
   line-height: 1;
   font-weight: 800;
   letter-spacing: 0;
@@ -1431,8 +1431,8 @@ textarea {
 .dashboard-header h2,
 .org-main-header h2 {
   margin: 6px 0 0;
-  font-size: 2rem;
-  letter-spacing: -0.04em;
+  font-size: 1.55rem;
+  letter-spacing: 0;
 }
 
 .tab-row {
@@ -2160,7 +2160,7 @@ textarea {
 .schema-builder-header h2 {
   margin: 4px 0 6px;
   color: #071a37;
-  font-size: 26px;
+  font-size: 22px;
   line-height: 1.1;
 }
 
@@ -2342,7 +2342,7 @@ textarea {
 .org-dashboard-hero h2 {
   margin: 4px 0 5px;
   color: #071a37;
-  font-size: 28px;
+  font-size: 22px;
   line-height: 1.1;
 }
 
@@ -2385,7 +2385,7 @@ textarea {
 .org-widget-card strong {
   display: block;
   color: #071a37;
-  font-size: 34px;
+  font-size: 27px;
   line-height: 1;
 }
 
@@ -2501,7 +2501,7 @@ textarea {
   position: relative;
   z-index: 1;
   color: #071a37;
-  font-size: 26px;
+  font-size: 22px;
 }
 
 .legend-list,
@@ -2634,7 +2634,7 @@ textarea {
 .org-profile-hero h2 {
   margin: 0 0 6px;
   color: #0b1d38;
-  font-size: 26px;
+  font-size: 22px;
   line-height: 1.1;
   font-weight: 800;
   letter-spacing: 0;
@@ -2693,7 +2693,7 @@ textarea {
 .profile-field a {
   margin: 0;
   color: #071a37;
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.45;
   font-weight: 600;
   text-decoration: none;
@@ -2725,7 +2725,7 @@ textarea {
 .org-profile-address {
   margin: 0 0 16px;
   color: #122744;
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.55;
 }
 
@@ -2748,8 +2748,8 @@ textarea {
 }
 
 .kpi-card strong {
-  font-size: 2rem;
-  letter-spacing: -0.05em;
+  font-size: 1.55rem;
+  letter-spacing: 0;
   color: #0b1d38;
 }
 
@@ -4313,7 +4313,7 @@ textarea {
 .hosted-card h1 {
   margin: 0;
   color: #071a37;
-  font-size: 28px;
+  font-size: 24px;
   line-height: 1.08;
   letter-spacing: 0;
 }
