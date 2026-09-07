@@ -18,7 +18,37 @@ function RegistrationStep() {
       </>
     )
   }
-  if (step === 1) return <><div className="split-row verify-row"><label>REGISTRATION NUMBER*<input value={registrationForm.gst} onChange={(e) => updateRegistrationField('gst', e.target.value.toUpperCase())} placeholder="GST / CIN / NGO registration number" /></label><button type="button" className="verify-button">Verify</button></div></>
+  if (step === 1) return (
+    <>
+      <div className="step-row">
+        <label>REGISTRATION ID TYPE*
+          <select value={registrationForm.registrationIdType} onChange={(e) => updateRegistrationField('registrationIdType', e.target.value)}>
+            <option value="">Select registration ID type</option>
+            <option value="GSTIN">GSTIN</option>
+            <option value="CIN">CIN</option>
+            <option value="LLPIN">LLPIN</option>
+            <option value="NGO_REGISTRATION">NGO Registration</option>
+            <option value="TRUST_REGISTRATION">Trust Registration</option>
+            <option value="SOCIETY_REGISTRATION">Society Registration</option>
+            <option value="SHOP_ESTABLISHMENT">Shop & Establishment</option>
+            <option value="UDYAM">Udyam / MSME</option>
+            <option value="OTHER">Other</option>
+          </select>
+        </label>
+      </div>
+      <div className="split-row verify-row">
+        <label>REGISTRATION NUMBER*
+          <input value={registrationForm.gst} onChange={(e) => updateRegistrationField('gst', e.target.value.toUpperCase())} placeholder={registrationForm.registrationIdType ? `Enter ${registrationForm.registrationIdType} number` : 'GSTIN / CIN / NGO registration number'} />
+        </label>
+        <button type="button" className="verify-button">Verify</button>
+      </div>
+      <div className="step-row">
+        <label>ISSUING AUTHORITY
+          <input value={registrationForm.registrationAuthority} onChange={(e) => updateRegistrationField('registrationAuthority', e.target.value)} placeholder="MCA, GSTN, Charity Commissioner, Registrar of Societies" />
+        </label>
+      </div>
+    </>
+  )
   if (step === 2) return <><div className="step-row"><label>REPRESENTATIVE NAME*<input value={registrationForm.repName} onChange={(e) => updateRegistrationField('repName', e.target.value)} placeholder="Enter representative name" /></label></div><div className="split-row verify-row"><label>REPRESENTATIVE EMAIL*<input type="email" value={registrationForm.repEmail} onChange={(e) => updateRegistrationField('repEmail', e.target.value)} placeholder="rep@yourorg.com" /></label><button type="button" className="verify-button">Verify</button></div><div className="step-row"><label>MOBILE NUMBER<input type="tel" inputMode="tel" value={registrationForm.repMobile} onChange={(e) => updateRegistrationField('repMobile', e.target.value)} placeholder="+91-XXXXXXXXXX" /></label></div><div className="step-row"><label>DESIGNATION<input value={registrationForm.designation} onChange={(e) => updateRegistrationField('designation', e.target.value)} placeholder="Designation" /></label></div><div className="step-row"><label>EMPLOYEE ID<input value={registrationForm.empId} onChange={(e) => updateRegistrationField('empId', e.target.value)} placeholder="Employee ID" /></label></div></>
   if (step === 3) return <><div className="step-row"><label>ADDRESS LINE 1*<input value={registrationForm.address} onChange={(e) => updateRegistrationField('address', e.target.value)} placeholder="Building, street, area" /></label></div><div className="step-row"><label>ADDRESS LINE 2<input value={registrationForm.addressLine2} onChange={(e) => updateRegistrationField('addressLine2', e.target.value)} placeholder="Landmark, suite, floor" /></label></div><div className="split-row"><label>CITY*<input value={registrationForm.city} onChange={(e) => updateRegistrationField('city', e.target.value)} placeholder="City" /></label><label>DISTRICT<input value={registrationForm.district} onChange={(e) => updateRegistrationField('district', e.target.value)} placeholder="District" /></label></div><div className="split-row"><label>STATE*<input value={registrationForm.state} onChange={(e) => updateRegistrationField('state', e.target.value)} placeholder="State" /></label><label>POSTAL CODE*<input value={registrationForm.postalCode} onChange={(e) => updateRegistrationField('postalCode', e.target.value)} placeholder="Postal code" /></label></div><div className="step-row"><label>ADDRESS PROOF REFERENCE<input value={registrationForm.addressProofRef} onChange={(e) => updateRegistrationField('addressProofRef', e.target.value)} placeholder="Document URL or reference number" /></label></div></>
   return <><div className="step-row"><label>WEBSITE<input type="url" value={registrationForm.website} onChange={(e) => updateRegistrationField('website', e.target.value)} placeholder="https://www.yourorg.com" /></label></div><div className="step-row"><label>DOMAIN<input value={registrationForm.domain} onChange={(e) => updateRegistrationField('domain', e.target.value)} placeholder="yourorg.com" /></label></div><div className="step-row"><label>LOGO UPLOAD<input value={registrationForm.logo} onChange={(e) => updateRegistrationField('logo', e.target.value)} placeholder="Upload logo" /></label></div></>

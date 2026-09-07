@@ -79,6 +79,7 @@ function ApprovalModal({ item, type, onClose, onConfirm, actions }: any) {
   }
 
   if (type === 'app') {
+    const viewOnly = (record as typeof record & { reviewMode?: string }).reviewMode === 'view'
     return (
       <ModalShell title="Application Review" icon="applications" onClose={onClose}>
         <DetailRow label="Application" value={record.name} />
@@ -86,7 +87,10 @@ function ApprovalModal({ item, type, onClose, onConfirm, actions }: any) {
         <DetailRow label="Type" value={record.type} />
         <DetailRow label="Status" value={<span className={`status-pill-ui status-${record.status}`}><AdminIcon name={record.status === 'approved' ? 'check' : record.status === 'rejected' ? 'rejected' : 'pending'} />{record.status}</span>} />
         <DetailRow label="Redirect URI" value={record.redirectUri} />
-        <div className="modal-actions">{record.status !== 'approved' && <button type="button" className="primary-button icon-text-button" onClick={() => onConfirm({ title: 'Approve Application', message: `Approve application "${record.name}"?`, onConfirm: () => actions.approveApplication(record) })}><AdminIcon name="check" />Approve</button>}</div>
+        <div className="modal-actions">
+          <button type="button" className="secondary-button" onClick={onClose}>Close</button>
+          {!viewOnly && record.status !== 'approved' && <button type="button" className="primary-button icon-text-button" onClick={() => onConfirm({ title: 'Approve Application', message: `Approve application "${record.name}"?`, onConfirm: () => actions.approveApplication(record) })}><AdminIcon name="check" />Approve</button>}
+        </div>
       </ModalShell>
     )
   }
@@ -115,7 +119,7 @@ function AppCredentialModal({ data, onClose }: any) {
     <ModalShell title="Application Credentials" icon="api" onClose={onClose}>
       <DetailRow label="Application" value={`${data.app?.name || '-'} - ${data.app?.id || '-'}`} />
       <DetailRow label="Client ID" value={<code>{data.clientId}</code>} />
-      <DetailRow label="Client Secret" value={<code>{data.clientSecret}</code>} />
+      {/* <DetailRow label="Client Secret" value={<code>{data.clientSecret}</code>} /> */}
       <div className="modal-actions"><button className="secondary-button" onClick={() => navigator.clipboard.writeText(`clientId: ${data.clientId}\nclientSecret: ${data.clientSecret}`)}>Copy</button><button className="primary-button" onClick={onClose}>Close</button></div>
     </ModalShell>
   )

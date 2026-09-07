@@ -14,6 +14,7 @@ const requiredRegistrationFields: Array<{ key: string; label: string }> = [
   { key: 'type', label: 'Organization type' },
   { key: 'country', label: 'Country' },
   { key: 'email', label: 'Official email' },
+  { key: 'registrationIdType', label: 'Registration ID type' },
   { key: 'gst', label: 'Registration number' },
   { key: 'repName', label: 'Representative name' },
   { key: 'repEmail', label: 'Representative email' },
@@ -113,7 +114,7 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
   const [view, setCurrentView] = useState<CatalogueView>(initialView)
   const [step, setStep] = useState(0)
   const [registrationForm, setRegistrationForm] = useState({
-    name: '', type: '', country: '', email: '', phone: '', gst: '', repName: '', repEmail: '', repMobile: '', designation: '', empId: '', address: '', addressLine2: '', city: '', district: '', state: '', postalCode: '', addressProofRef: '', website: '', domain: '', logo: '',
+    name: '', type: '', country: '', email: '', phone: '', registrationIdType: '', registrationAuthority: '', gst: '', repName: '', repEmail: '', repMobile: '', designation: '', empId: '', address: '', addressLine2: '', city: '', district: '', state: '', postalCode: '', addressProofRef: '', website: '', domain: '', logo: '',
   })
   const [platformLogin, setPlatformLogin] = useState({ username: '', password: '' })
   const [platformLoginError, setPlatformLoginError] = useState('')
@@ -422,7 +423,7 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
   const validateRegistrationStep = (targetStep = step) => {
     const stepFields: Record<number, string[]> = {
       0: ['name', 'type', 'country', 'email', 'phone'],
-      1: ['gst'],
+      1: ['registrationIdType', 'gst'],
       2: ['repName', 'repEmail'],
       3: ['address', 'city', 'state', 'postalCode'],
     }
@@ -490,7 +491,8 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
           officialEmail: registrationForm.email,
           officialPhone: registrationForm.phone,
           registrationNumber: registrationForm.gst,
-          verificationIdType: 'GST',
+          registrationAuthority: registrationForm.registrationAuthority,
+          verificationIdType: registrationForm.registrationIdType,
           verificationId: registrationForm.gst,
           verificationIdVerifyStatus: 'PENDING',
           websiteUrl: registrationForm.website,
@@ -527,7 +529,8 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
         email: registrationForm.email,
         phone: registrationForm.phone,
         status: 'pending',
-        registrationDetails: { registrationNumber: registrationForm.gst, gst: registrationForm.gst },
+        registrationType: registrationForm.registrationIdType,
+        registrationDetails: { registrationNumber: registrationForm.gst, gst: registrationForm.gst, authority: registrationForm.registrationAuthority },
         representative: { name: registrationForm.repName, email: registrationForm.repEmail, mobile: registrationForm.repMobile, designation: registrationForm.designation },
         address: [registrationForm.address, registrationForm.addressLine2, registrationForm.city, registrationForm.state, registrationForm.postalCode].filter(Boolean).join(', '),
         submittedAt: new Date().toLocaleString(),
@@ -621,6 +624,7 @@ export function CatalogueProvider({ children, initialView = 'home' }: CatalogueP
     addAudit('Submit Application', `Submitted application ${mappedApp.name} for approval`)
     setRegisterAppForm({ name:'', type:'web', description:'', contactEmail:'', domain:'', redirectUri:'', logoutUri:'' })
     setRegisterAppModal(false)
+    return mappedApp
   }
 
   const submitIdentitySchemaVersion = async ({
