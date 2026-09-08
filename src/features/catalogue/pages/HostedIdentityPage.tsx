@@ -101,6 +101,33 @@ const getLoginFields = (schema?: HostedSchema): HostedField[] => {
   return []
 }
 
+const normalizeFieldToken = (value?: string) => (value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+
+const canonicalFieldName = (field: HostedField) => {
+  const tokens = [
+    normalizeFieldToken(field.name),
+    normalizeFieldToken(field.label),
+    normalizeFieldToken(field.name).replace(/_\d+$/, ''),
+  ]
+  if (field.type === 'email' || tokens.includes('email')) return 'email'
+  if (field.type === 'password' || tokens.includes('password')) return 'password'
+  if (field.type === 'phone' || tokens.some((token) => ['mobile', 'mobile_number', 'phone', 'phone_number'].includes(token))) return 'mobile'
+  if (tokens.some((token) => ['username', 'user_name', 'login_id', 'userid', 'user_id'].includes(token))) return 'username'
+  return ''
+}
+
+const buildIdentityFieldsPayload = (fields: HostedField[], values: Record<string, string>) => {
+  const payload: Record<string, string> = { ...values }
+  fields.forEach((field) => {
+    const canonicalName = canonicalFieldName(field)
+    const value = String(values[field.name] || '').trim()
+    if (canonicalName && value && !String(payload[canonicalName] || '').trim()) {
+      payload[canonicalName] = value
+    }
+  })
+  return payload
+}
+
 const redirectWithParams = (redirectUri: string, params: Record<string, string>) => {
   const url = new URL(redirectUri)
   Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value))
@@ -150,6 +177,22 @@ const hostedIdentityRequest = async (path: string, body: Record<string, unknown>
     }
   }
   throw lastError instanceof Error ? lastError : new Error('Identity OS request failed.')
+}
+
+const createConsentNotice = async (body: Record<string, unknown>) => {
+  const response = await fetch('/api/consent-notice', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    throw new Error(data.message || 'CMP notice creation failed.')
+  }
+  if (!data.noticeUrl) {
+    throw new Error('CMP did not return a notice link.')
+  }
+  return data.noticeUrl as string
 }
 
 export default function HostedIdentityPage({ initialClientId = '', initialRedirectUri = '', mode }: HostedIdentityPageProps) {
@@ -237,23 +280,30 @@ export default function HostedIdentityPage({ initialClientId = '', initialRedire
     setSubmitting(true)
     setMessage('')
     try {
-      const username = formValues.username || formValues.email
+      const submittedFields = buildIdentityFieldsPayload(fields, formValues)
+      const username = submittedFields.username || submittedFields.email || submittedFields.mobile || ''
 
       if (currentMode === 'register') {
         await hostedIdentityRequest('/api/v1/onboarding/identity/register', {
           clientId,
           redirectUri: callbackUri,
-          fields: formValues,
+          fields: submittedFields,
         })
         setMessageTone('success')
-        setMessage('Registration completed successfully. You can now login with this username and password.')
+        setMessage('Registration completed successfully. Opening consent notice...')
+        const noticeUrl = await createConsentNotice({
+          clientId,
+          redirectUri: callbackUri,
+          fields: submittedFields,
+        })
+        window.location.href = noticeUrl
         return
       }
 
       const tokenResponse = await hostedIdentityRequest('/api/v1/onboarding/identity/login', {
         clientId,
         redirectUri: callbackUri,
-        fields: formValues,
+        fields: submittedFields,
       })
       redirectWithParams(callbackUri, {
         access_token: tokenResponse.accessToken,
