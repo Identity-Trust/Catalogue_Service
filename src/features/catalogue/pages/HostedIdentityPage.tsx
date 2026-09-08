@@ -41,6 +41,13 @@ interface HostedField {
   type: string
   required?: boolean
   options?: string[]
+  dpdp?: {
+    sensitive?: boolean
+    consentRequired?: boolean
+    purpose?: string
+    retentionDays?: number | null
+    justification?: string
+  }
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080'
@@ -101,7 +108,22 @@ const getLoginFields = (schema?: HostedSchema): HostedField[] => {
   return []
 }
 
+const sensitiveFieldNames = new Set(['aadhaar', 'aadhar', 'pan', 'passport', 'voter_id', 'driving_license', 'biometric', 'date_of_birth', 'dob', 'address'])
 const normalizeFieldToken = (value?: string) => (value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+
+const isSensitiveField = (field: HostedField) => {
+  const fieldName = normalizeFieldToken(field.name)
+  return Boolean(field.dpdp?.sensitive || sensitiveFieldNames.has(fieldName) || field.type === 'gov-id' || field.type === 'address')
+}
+
+const getConsentRequiredFields = (schema: HostedSchema | undefined, fields: HostedField[]) => {
+  const sensitiveSummary = Array.isArray(schema?.schemaJson?.dpdp?.sensitiveFields) ? schema?.schemaJson?.dpdp?.sensitiveFields : []
+  const summaryByName = new Map<string, { consentRequired?: boolean }>(sensitiveSummary.map((field: any) => [normalizeFieldToken(field.name), field]))
+  return fields.filter((field) => {
+    const summary = summaryByName.get(normalizeFieldToken(field.name))
+    return Boolean(field.dpdp?.consentRequired || summary?.consentRequired || isSensitiveField(field))
+  })
+}
 
 const canonicalFieldName = (field: HostedField) => {
   const tokens = [
@@ -179,6 +201,19 @@ const hostedIdentityRequest = async (path: string, body: Record<string, unknown>
   throw lastError instanceof Error ? lastError : new Error('Identity OS request failed.')
 }
 
+const describeError = (value: any): string => {
+  if (!value) return ''
+  if (typeof value === 'string') return value
+  if (Array.isArray(value)) return value.map(describeError).filter(Boolean).join('; ')
+  if (typeof value === 'object') {
+    if (value.message) return describeError(value.message)
+    if (value.error) return describeError(value.error)
+    if (value.code) return String(value.code)
+    return JSON.stringify(value)
+  }
+  return String(value)
+}
+
 const createConsentNotice = async (body: Record<string, unknown>) => {
   const response = await fetch('/api/consent-notice', {
     method: 'POST',
@@ -187,12 +222,21 @@ const createConsentNotice = async (body: Record<string, unknown>) => {
   })
   const data = await response.json().catch(() => ({}))
   if (!response.ok) {
-    throw new Error(data.message || 'CMP notice creation failed.')
+    throw new Error(describeError(data.message || data.error || data) || 'CMP notice creation failed.')
   }
   if (!data.noticeUrl) {
     throw new Error('CMP did not return a notice link.')
   }
   return data.noticeUrl as string
+}
+
+const buildHostedFlowUrl = (mode: 'register' | 'login', clientId: string, redirectUri: string) =>
+  `/identity/${mode}?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}`
+
+const buildConsentReturnUrl = () => {
+  const url = new URL(window.location.href)
+  url.searchParams.set('cmp_consent', 'granted')
+  return url.toString()
 }
 
 export default function HostedIdentityPage({ initialClientId = '', initialRedirectUri = '', mode }: HostedIdentityPageProps) {
@@ -206,6 +250,9 @@ export default function HostedIdentityPage({ initialClientId = '', initialRedire
   const [message, setMessage] = useState('')
   const [messageTone, setMessageTone] = useState<'error' | 'success'>('error')
   const [submitting, setSubmitting] = useState(false)
+  const [consentSubmitting, setConsentSubmitting] = useState(false)
+  const [consentGranted, setConsentGranted] = useState(false)
+  const [consentPrincipal, setConsentPrincipal] = useState('')
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -256,10 +303,76 @@ export default function HostedIdentityPage({ initialClientId = '', initialRedire
   const loginSchema = getApprovedSchema(schemas, app, 'login')
   const currentMode = mode === 'choice' ? 'choice' : mode
   const fields = currentMode === 'register' ? getRegistrationFields(registrationSchema) : getLoginFields(loginSchema)
+  const currentSubmittedFields = buildIdentityFieldsPayload(fields, formValues)
+  const currentDataPrincipalId = currentSubmittedFields.email || currentSubmittedFields.username || currentSubmittedFields.mobile || currentSubmittedFields.phone || ''
+  const consentFields = currentMode === 'register' ? getConsentRequiredFields(registrationSchema, fields) : []
+  const consentRequired = consentFields.length > 0
+  const schemaConsentKey = currentMode === 'register'
+    ? `identity_registration_consent:${clientId}:${registrationSchema?.versionId || registrationSchema?.id || 'schema'}:${consentFields.map((field) => normalizeFieldToken(field.name)).join('|')}`
+    : ''
+  const pendingConsentPrincipalKey = `${schemaConsentKey}:pending-principal`
+  const registrationDraftKey = `identity_registration_draft:${clientId}`
   const schemaMissing = Boolean(app && currentMode === 'register' && !registrationSchema) || Boolean(app && currentMode === 'login' && !loginSchema)
   const fieldsMissing = Boolean(app && currentMode === 'login' && loginSchema && fields.length === 0)
+  const authSwitchUrl = buildHostedFlowUrl(currentMode === 'register' ? 'login' : 'register', clientId, callbackUri)
+  const consentGrantedForCurrentPrincipal = consentGranted && Boolean(currentDataPrincipalId) && consentPrincipal === currentDataPrincipalId
+
+  useEffect(() => {
+    if (currentMode !== 'register' || !clientId || !registrationSchema) return
+    try {
+      const storedDraft = sessionStorage.getItem(registrationDraftKey)
+      if (storedDraft) setFormValues((prev) => ({ ...JSON.parse(storedDraft), ...prev }))
+      const params = new URLSearchParams(window.location.search)
+      const returnedFromConsent = params.get('cmp_consent') === 'granted'
+      if (returnedFromConsent) {
+        const principal = sessionStorage.getItem(pendingConsentPrincipalKey) || ''
+        sessionStorage.setItem(schemaConsentKey, principal)
+        setConsentGranted(true)
+        setConsentPrincipal(principal)
+        setMessageTone('success')
+        setMessage('Your Consent submitted successfully. You can now submit your registration by click on Register button.')
+      } else {
+        const principal = sessionStorage.getItem(schemaConsentKey) || ''
+        setConsentGranted(Boolean(principal))
+        setConsentPrincipal(principal)
+      }
+    } catch {
+      setConsentGranted(false)
+      setConsentPrincipal('')
+    }
+  }, [clientId, currentMode, pendingConsentPrincipalKey, registrationDraftKey, registrationSchema, schemaConsentKey])
 
   const updateField = (name: string, value: string) => setFormValues((prev) => ({ ...prev, [name]: value }))
+  const giveConsent = async () => {
+    if (!app || !callbackUri) return
+    const submittedFields = buildIdentityFieldsPayload(fields, formValues)
+    const dataPrincipalId = submittedFields.email || submittedFields.username || submittedFields.mobile || submittedFields.phone || ''
+    if (!dataPrincipalId) {
+      setMessageTone('error')
+      setMessage('Enter email, username, or phone before giving consent.')
+      return
+    }
+    setConsentSubmitting(true)
+    setMessage('')
+    try {
+      sessionStorage.setItem(registrationDraftKey, JSON.stringify(formValues))
+      sessionStorage.setItem(pendingConsentPrincipalKey, dataPrincipalId)
+      const noticeUrl = await createConsentNotice({
+        clientId,
+        redirectUri: callbackUri,
+        consentRedirectUri: buildConsentReturnUrl(),
+        fields: submittedFields,
+        consentFields: consentFields.map((field) => field.label || field.name),
+        schemaId: registrationSchema?.versionId || registrationSchema?.id,
+      })
+      window.location.href = noticeUrl
+    } catch (error) {
+      setMessageTone('error')
+      setMessage(error instanceof Error ? error.message : 'CMP notice creation failed.')
+    } finally {
+      setConsentSubmitting(false)
+    }
+  }
   const submit = async () => {
     if (!app) {
       setMessageTone('error')
@@ -277,6 +390,11 @@ export default function HostedIdentityPage({ initialClientId = '', initialRedire
       setMessage(`${missing.label || missing.name} is required.`)
       return
     }
+    if (currentMode === 'register' && consentRequired && !consentGrantedForCurrentPrincipal) {
+      setMessageTone('error')
+      setMessage('Give consent for the PII fields before registration.')
+      return
+    }
     setSubmitting(true)
     setMessage('')
     try {
@@ -289,14 +407,18 @@ export default function HostedIdentityPage({ initialClientId = '', initialRedire
           redirectUri: callbackUri,
           fields: submittedFields,
         })
+        setFormValues({})
+        setConsentGranted(false)
+        setConsentPrincipal('')
         setMessageTone('success')
-        setMessage('Registration completed successfully. Opening consent notice...')
-        const noticeUrl = await createConsentNotice({
-          clientId,
-          redirectUri: callbackUri,
-          fields: submittedFields,
-        })
-        window.location.href = noticeUrl
+        setMessage('Registration completed successfully. You can now login with this username and password.')
+        sessionStorage.removeItem(registrationDraftKey)
+        sessionStorage.removeItem(pendingConsentPrincipalKey)
+        sessionStorage.removeItem(schemaConsentKey)
+        const url = new URL(window.location.href)
+        url.searchParams.delete('cmp_consent')
+        window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
         return
       }
 
@@ -354,6 +476,7 @@ export default function HostedIdentityPage({ initialClientId = '', initialRedire
         {app && currentMode === 'register' && !registrationSchema && <div className="hosted-warning">No approved registration schema found for this application. Ask the organization admin to submit and approve a registration schema.</div>}
         {app && currentMode === 'login' && !loginSchema && <div className="hosted-warning">No approved login configuration found for this application. Ask the organization admin to submit and approve a login configuration.</div>}
         {fieldsMissing && <div className="hosted-warning">Login configuration does not define renderable fields. Re-submit this login configuration so Identity OS stores loginFields for this application.</div>}
+        {message && <div className={messageTone === 'success' ? 'hosted-success' : 'hosted-error'}>{message}</div>}
         <form className="hosted-form" onSubmit={(event) => { event.preventDefault(); submit() }}>
           {fields.map((field) => (
             <label key={field.name}>{field.label || field.name}
@@ -364,10 +487,18 @@ export default function HostedIdentityPage({ initialClientId = '', initialRedire
                   : <input type={field.type === 'password' ? 'password' : field.type === 'email' ? 'email' : 'text'} value={formValues[field.name] || ''} onChange={(event) => updateField(field.name, event.target.value)} placeholder={field.label || field.name} />}
             </label>
           ))}
-          {message && <div className={messageTone === 'success' ? 'hosted-success' : 'hosted-error'}>{message}</div>}
-          <button className="primary-button hosted-submit" disabled={submitting || !app || app.status !== 'approved' || schemaMissing || fields.length === 0}>{submitting ? 'Processing...' : currentMode === 'register' ? 'Register and return' : 'Login and return'}</button>
+          {currentMode === 'register' && consentRequired && <div className={consentGrantedForCurrentPrincipal ? 'hosted-success hosted-consent-panel' : 'hosted-warning hosted-consent-panel'}>
+            <span>
+              I consent to the collection and processing of my personal data for the stated purpose.{' '}
+              {!consentGrantedForCurrentPrincipal && <button type="button" className="hosted-consent-link" disabled={consentSubmitting} onClick={giveConsent}>{consentSubmitting ? 'Opening notice...' : 'Click here'}</button>}
+            </span>
+          </div>}
+          <button className="primary-button hosted-submit" disabled={submitting || consentSubmitting || !app || app.status !== 'approved' || schemaMissing || fields.length === 0 || (currentMode === 'register' && consentRequired && !consentGrantedForCurrentPrincipal)}>{submitting ? 'Processing...' : currentMode === 'register' ? 'Register' : 'Login and return'}</button>
         </form>
-        <div className="hosted-footer">Redirect URI: <code>{callbackUri || '-'}</code></div>
+        {clientId && callbackUri && <div className="hosted-auth-switch">
+          {currentMode === 'register' ? 'Already registered?' : 'Need an account?'} <a href={authSwitchUrl}>{currentMode === 'register' ? 'Login' : 'Register'}</a>
+        </div>}
+        {/* <div className="hosted-footer">Redirect URI: <code>{callbackUri || '-'}</code></div> */}
       </section>
     </div>
   )

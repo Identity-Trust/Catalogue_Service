@@ -55,7 +55,7 @@ const sanitizeFieldForSchema = (field: RegistrationField): RegistrationField => 
     sensitive: true,
     purpose: cleanField.dpdp?.purpose?.trim() || '',
     retentionDays: toNumberOrNull(cleanField.dpdp?.retentionDays),
-    consentRequired: Boolean(cleanField.dpdp?.consentRequired),
+    consentRequired: true,
     justification: cleanField.dpdp?.justification?.trim() || '',
   }
   return cleanField
@@ -135,6 +135,9 @@ export default function RegistrationBuilderPage() {
     registrationFields: schemaFields,
     dpdp: {
       model: 'field-level',
+      consentRequired: sensitiveFieldSummary.length > 0,
+      consentProvider: 'cmp',
+      consentTrigger: 'before-registration-submit',
       sensitiveFields: sensitiveFieldSummary,
     },
   }

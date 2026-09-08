@@ -8,6 +8,19 @@ const CMP_BUSINESS_PROCESS_VERSION = Number(process.env.CMP_BUSINESS_PROCESS_VER
 const cleanReferencePart = (value: string) =>
   value.trim().replace(/[^a-zA-Z0-9()._\-/]+/g, '_').slice(0, 80)
 
+const describeError = (value: any): string => {
+  if (!value) return ''
+  if (typeof value === 'string') return value
+  if (Array.isArray(value)) return value.map(describeError).filter(Boolean).join('; ')
+  if (typeof value === 'object') {
+    if (value.message) return describeError(value.message)
+    if (value.error) return describeError(value.error)
+    if (value.code) return String(value.code)
+    return JSON.stringify(value)
+  }
+  return String(value)
+}
+
 const normalizeNoticeUrl = (noticeUrl: string) => {
   const cmpUrl = new URL(CMP_BASE_URL)
   const url = new URL(noticeUrl)
@@ -29,13 +42,16 @@ export async function POST(request: NextRequest) {
     const fields = body.fields || {}
     const clientId = String(body.clientId || '')
     const redirectUri = String(body.redirectUri || '')
+    const consentRedirectUri = String(body.consentRedirectUri || redirectUri)
+    const consentFields = Array.isArray(body.consentFields) ? body.consentFields : []
+    const referenceNonce = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     const dataPrincipalId = String(
       fields.email || fields.username || fields.mobile || fields.phone || '',
     ).trim()
 
-    if (!clientId || !redirectUri || !dataPrincipalId) {
+    if (!clientId || !consentRedirectUri || !dataPrincipalId) {
       return NextResponse.json(
-        { message: 'clientId, redirectUri, and a user identifier are required.' },
+        { message: 'clientId, consentRedirectUri, and a user identifier are required.' },
         { status: 400 },
       )
     }
@@ -48,12 +64,12 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        reference_id: cleanReferencePart(`registration-${clientId}-${dataPrincipalId}`),
+        reference_id: cleanReferencePart(`registration-${clientId}-${dataPrincipalId}-${referenceNonce}`),
         data_principal_id: cleanReferencePart(dataPrincipalId),
         notice_settings: {
           expires_in_hours: 24,
           redirection_type: 'redirect',
-          redirection_url: redirectUri,
+          redirection_url: consentRedirectUri,
           default_language: 'en',
           view_mode: 'purpose_of_consent',
         },
@@ -67,14 +83,17 @@ export async function POST(request: NextRequest) {
         metadata: [
           { key: 'client_id', value: clientId },
           { key: 'registration_source', value: 'identity_os' },
+          { key: 'redirect_uri', value: redirectUri || consentRedirectUri },
+          { key: 'pii_fields', value: consentFields.join(', ') || 'registration_pii' },
         ],
       }),
     })
 
     const data = await response.json().catch(() => null)
     if (!response.ok) {
+      const message = describeError(data?.message || data?.error || data)
       return NextResponse.json(
-        { message: data?.message || data?.error || 'CMP notice creation failed.' },
+        { message: message || 'CMP notice creation failed.' },
         { status: response.status },
       )
     }
