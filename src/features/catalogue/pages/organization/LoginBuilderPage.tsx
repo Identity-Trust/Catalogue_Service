@@ -212,7 +212,7 @@ export default function LoginBuilderPage() {
               ))}
             </div>
 
-            <div className="builder-preview form-card">
+            {/* <div className="builder-preview form-card">
               <h4>Login Flow</h4>
               <div className="flow-step-list">
                 {flowSteps.map((step, idx) => (
@@ -228,7 +228,7 @@ export default function LoginBuilderPage() {
                 ))}
                 <div className="add-step-row"><input placeholder="Add custom step" value={newStep} onChange={(event) => setNewStep(event.target.value)} /><button className="ghost-button" onClick={addStep}>Add Step</button></div>
               </div>
-            </div>
+            </div> */}
 
             <div className="builder-config form-card">
               <h4>Security Controls</h4>
